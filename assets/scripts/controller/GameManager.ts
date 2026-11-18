@@ -50,9 +50,8 @@ export class GameManager extends Component {
         if (this._state !== GameState.Playing || !this._world) {
             return;
         }
-        // NOTE: a long frame (tab switch, GC pause) is clamped so fast bullets cannot skip a target.
-        const step = Math.min(dt, GameConfig.FRAME.MAX_DT);
-        const outcome = this._world.step(step, this._input);
+        const outcome = this.simulateFrame(dt, this._world);
+        // NOTE: HP is broadcast before the outcome, so the HUD already shows 0 when GAME_OVER arrives.
         this.emitChanges(this._world);
         this.handleOutcome(outcome, this._world);
     }
@@ -87,6 +86,23 @@ export class GameManager extends Component {
     }
 
     // ---- Private ----
+
+    /**
+     * Advances the world by one real frame, split into steps no longer than MAX_DT, so a slow frame
+     * stays real-time (no slow motion below 20 fps) and fast bullets still cannot skip a target.
+     * @returns The outcome of the last step; stepping stops as soon as the round is decided.
+     */
+    private simulateFrame(dt: number, world: BattleWorld): BattleOutcome {
+        // NOTE: frames longer than MAX_FRAME_TIME (tab switch, debugger) are cut, not fast-forwarded.
+        let remaining = Math.min(dt, GameConfig.FRAME.MAX_FRAME_TIME);
+        let outcome = BattleOutcome.None;
+        while (remaining > 0 && outcome === BattleOutcome.None) {
+            const step = Math.min(remaining, GameConfig.FRAME.MAX_DT);
+            outcome = world.step(step, this._input);
+            remaining -= step;
+        }
+        return outcome;
+    }
 
     /** Broadcasts the start values so the HUD never shows numbers from the previous round. */
     private emitInitialValues(world: BattleWorld): void {

@@ -2,7 +2,7 @@
  * GameEvents.ts
  * Single source of truth for EventBus event names. Each entry documents who emits it and its
  * payload, so emitters and listeners agree. GameManager is the only emitter of gameplay events;
- * HUD, popups, camera and audio only listen.
+ * HUD, popups, camera and the boss view only listen.
  */
 export const GameEvents = {
     /** Payload: (state: GameState) - the state the game just entered. */

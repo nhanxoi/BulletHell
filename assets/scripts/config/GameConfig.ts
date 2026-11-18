@@ -6,8 +6,13 @@
  */
 export const GameConfig = {
     FRAME: {
-        /** Longest simulated step, seconds. A long frame (tab switch, GC) is clamped so bullets cannot tunnel. */
+        /** Longest single simulation step, seconds. Longer frames are split into steps of this size so bullets cannot tunnel. */
         MAX_DT: 0.05,
+        /**
+         * Longest real frame that is simulated, seconds (up to 5 steps). Anything longer (tab switch,
+         * debugger pause) is dropped, so the game does not fast-forward through several seconds at once.
+         */
+        MAX_FRAME_TIME: 0.25,
     },
     ARENA: {
         /** Inner playable size, px (walls are outside it). */
@@ -73,6 +78,8 @@ export const GameConfig = {
         BLINK_ALPHA: 70,
         /** Seconds between two boss flash toggles while it winds up a dash. */
         WINDUP_FLASH_INTERVAL: 0.08,
+        /** Seconds the boss stays lighter after it takes a hit. */
+        BOSS_HIT_FLASH: 0.06,
     },
     JOYSTICK: {
         /** Max knob distance from the base centre, UI px. */
@@ -91,5 +98,8 @@ export const GameConfig = {
         BOSS_PHASE_MEDIUM: '#DC2626',
         BOSS_PHASE_LOW: '#7F1D1D',
         BOSS_WINDUP: '#FFFFFF',
+        /** Boss tint for a moment after a hit, and during a dash. */
+        BOSS_HIT: '#FCA5A5',
+        BOSS_DASH: '#A855F7',
     },
 } as const;

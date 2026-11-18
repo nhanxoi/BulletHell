@@ -1,7 +1,7 @@
 /**
  * EventBus.ts
  * Global publish/subscribe channel for systems that have no parent-child relationship
- * (for example: game logic -> HUD, gameplay -> audio).
+ * (for example: game logic -> HUD, popups, camera shake).
  *
  * Rules:
  * - Use event names from GameEvents only, never raw strings.

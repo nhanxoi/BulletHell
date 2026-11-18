@@ -1,9 +1,10 @@
 /**
  * VirtualJoystick.ts
- * Floating on-screen stick for mobile: the base jumps to where the finger lands on the left half
- * of the screen, the knob follows the finger (clamped to JOYSTICK.RADIUS) and the offset is
+ * Floating on-screen stick for touch screens: the base jumps to where the finger lands on the left
+ * half of the screen, the knob follows the finger (clamped to JOYSTICK.RADIUS) and the offset is
  * written to InputState.stickX / stickY. Only one finger drives it; other touches are ignored.
- * Disabled on desktop, where KeyboardInput is used.
+ * Disabled when the device has no touch screen, where KeyboardInput is used; when it is active
+ * it hides the keyboard hint label.
  *
  * Attach to node Joystick (UITransform covering the left half of the screen, via a Widget).
  * `base` is a child of Joystick and `knob` is a child of `base`.
@@ -33,6 +34,10 @@ export class VirtualJoystick extends Component {
     @property(Node)
     private knob: Node = null!;
 
+    /** "Move: WASD / Arrow keys" label, hidden when the stick is used instead of the keyboard. */
+    @property(Node)
+    private keyboardHint: Node = null!;
+
     private touchArea: UITransform | null = null;
     private activeTouchId = NO_TOUCH;
     /** Where the base rests when no finger is down (its position in the scene). */
@@ -41,17 +46,21 @@ export class VirtualJoystick extends Component {
     // ---- Lifecycle ----
 
     protected onLoad(): void {
-        if (!sys.isMobile) {
-            // NOTE: desktop uses the keyboard; hiding the node also stops it from catching clicks.
+        // NOTE: feature detection, not sys.isMobile: isMobile is a user-agent guess that misses
+        // iPadOS (it reports "Macintosh"). On the web INPUT_TOUCH is true when the browser exposes
+        // touch events, which desktop Chrome only does when a touch screen is present.
+        if (!sys.hasFeature(sys.Feature.INPUT_TOUCH)) {
+            // Keyboard only: hiding the node also stops it from catching clicks.
             this.node.active = false;
             return;
         }
         this.touchArea = this.node.getComponent(UITransform);
-        if (!this.gameManager || !this.base || !this.knob || !this.touchArea) {
-            console.error(`[VirtualJoystick] gameManager, base, knob or UITransform missing on node "${this.node.name}"`);
+        if (!this.gameManager || !this.base || !this.knob || !this.keyboardHint || !this.touchArea) {
+            console.error(`[VirtualJoystick] gameManager, base, knob, keyboardHint or UITransform missing on node "${this.node.name}"`);
             this.enabled = false;
             return;
         }
+        this.keyboardHint.active = false;
         this.baseRestPosition.set(this.base.position);
     }
 
