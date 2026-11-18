@@ -63,7 +63,10 @@ export class GameManager extends Component {
         return this._world;
     }
 
-    /** Latest player input, written by KeyboardInput and VirtualJoystick. */
+    /**
+     * Latest player input. Movement axes are written by KeyboardInput and VirtualJoystick;
+     * the dash request goes through requestDash() so it can be gated by the state.
+     */
     get input(): InputState {
         return this._input;
     }
@@ -81,6 +84,7 @@ export class GameManager extends Component {
         // NOTE: passing through Ready lets every view clear the previous round (panel, camera snap).
         this.setState(GameState.Ready);
         this._world.reset();
+        this._input.isDashRequested = false;
         this.emitInitialValues(this._world);
         this.setState(GameState.Playing);
     }

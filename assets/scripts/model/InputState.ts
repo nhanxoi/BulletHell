@@ -1,7 +1,8 @@
 /**
  * InputState.ts
- * Latest player input, written by input components (KeyboardInput, VirtualJoystick) when events
- * arrive and read once per frame by PlayerModel. Keeping it a plain object decouples the
+ * Latest player input: movement axes are written by input components (KeyboardInput,
+ * VirtualJoystick) when events arrive, the dash request by GameManager.requestDash(); PlayerModel
+ * reads it every simulation step. Keeping it a plain object decouples the
  * simulation from Cocos input APIs, so the model stays testable without the engine.
  */
 
@@ -14,7 +15,7 @@ export class InputState {
     stickX = 0;
     stickY = 0;
     /**
-     * Set by an input component when a dash key or button is pressed; PlayerModel.step resets it.
+     * Set by GameManager.requestDash() (dash key or button, only while playing); PlayerModel.step resets it.
      * NOTE: a one-shot flag, not a held state. A press during the dash cooldown is consumed and
      * dropped (not buffered), so a dash never fires late, long after the player pressed.
      */

@@ -9,6 +9,7 @@
 import { _decorator, Color, Component, Sprite, UITransform } from 'cc';
 import { GameConfig } from '../config/GameConfig';
 import { GameManager } from '../controller/GameManager';
+import { GameState } from '../model/GameState';
 const { ccclass, property } = _decorator;
 
 /** Shows the player model on screen. */
@@ -54,8 +55,9 @@ export class PlayerView extends Component {
         const player = world.player;
         this.node.setPosition(player.x, player.y, 0);
         // NOTE: the dash tint wins over the blink; only hit invulnerability blinks, the dash's own
-        // invulnerability is shown by the tint, so a dodge never looks like a hit.
-        if (player.isDashing) {
+        // invulnerability is shown by the tint, so a dodge never looks like a hit. Only while playing:
+        // the simulation stops at Game Over, so a dash in progress would otherwise stay tinted forever.
+        if (player.isDashing && this.gameManager.state === GameState.Playing) {
             this.applyColor(this.dashColor);
             return;
         }
