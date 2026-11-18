@@ -1,0 +1,19 @@
+{
+  "files.exclude": {
+    "**/*.meta": true,
+    "library/": true,
+    "temp/": true,
+    "local/": true,
+    "build/": true,
+    "profiles/": true
+  },
+  "search.exclude": {
+    "library/": true,
+    "temp/": true,
+    "build/": true
+  },
+  "editor.formatOnSave": true,
+  "editor.tabSize": 4,
+  "typescript.preferences.importModuleSpecifier": "relative",
+  "files.eol": "\n"
+}
