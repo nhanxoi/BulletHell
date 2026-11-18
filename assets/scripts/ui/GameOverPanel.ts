@@ -1,7 +1,7 @@
 /**
  * GameOverPanel.ts
- * Game Over screen: shows "VICTORY" or "DEFEAT" when the round ends and restarts the round when
- * Restart is clicked. The component sits on an always-active holder node so it can listen while
+ * Game Over screen: shows "GAME OVER" with the result (boss defeated or player defeated) when the
+ * round ends, and restarts the round when Restart is clicked. The component sits on an always-active holder node so it can listen while
  * the panel itself is hidden.
  *
  * Attach to node Popups; `panel` is its child (inactive by default) containing the title and button.
@@ -13,8 +13,8 @@ import { GameManager } from '../controller/GameManager';
 import { GameState } from '../model/GameState';
 const { ccclass, property } = _decorator;
 
-const VICTORY_TEXT = 'VICTORY';
-const DEFEAT_TEXT = 'DEFEAT';
+const VICTORY_TEXT = 'VICTORY! The boss is defeated';
+const DEFEAT_TEXT = 'DEFEAT! You were defeated';
 
 /** Shows the round result and offers a restart. */
 @ccclass('GameOverPanel')
@@ -25,8 +25,9 @@ export class GameOverPanel extends Component {
     @property(Node)
     private panel: Node = null!;
 
+    /** Shows the result line under the fixed "GAME OVER" title. */
     @property(Label)
-    private titleLabel: Label = null!;
+    private resultLabel: Label = null!;
 
     @property(Button)
     private restartButton: Button = null!;
@@ -34,7 +35,7 @@ export class GameOverPanel extends Component {
     // ---- Lifecycle ----
 
     protected onLoad(): void {
-        if (!this.gameManager || !this.panel || !this.titleLabel || !this.restartButton) {
+        if (!this.gameManager || !this.panel || !this.resultLabel || !this.restartButton) {
             console.error(`[GameOverPanel] a reference is not assigned on node "${this.node.name}"`);
             this.enabled = false;
             return;
@@ -58,7 +59,7 @@ export class GameOverPanel extends Component {
     // ---- Private ----
 
     private onGameOver(isVictory: boolean): void {
-        this.titleLabel.string = isVictory ? VICTORY_TEXT : DEFEAT_TEXT;
+        this.resultLabel.string = isVictory ? VICTORY_TEXT : DEFEAT_TEXT;
         this.panel.active = true;
     }
 
