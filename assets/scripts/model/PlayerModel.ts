@@ -69,8 +69,7 @@ export class PlayerModel implements Point {
     reset(): void {
         this._x = PLAYER.START_X;
         this._y = PLAYER.START_Y;
-        this.hitInvulnerableTimer = 0;
-        this.dashTimer = 0;
+        this.clearTimedEffects();
         this.dashCooldownTimer = 0;
         this.lastMoveX = 0;
         this.lastMoveY = 1;
@@ -103,24 +102,24 @@ export class PlayerModel implements Point {
         this.move(dt, moveX, moveY, bounds);
     }
 
-    /**
-     * Applies damage unless the player is invulnerable, then starts the invulnerability window.
-     * @returns True when the hit landed (HP was removed).
-     */
-    takeHit(damage: number): boolean {
+    /** Applies damage unless the player is invulnerable, then starts the hit invulnerability window. */
+    takeHit(damage: number): void {
         if (this.isInvulnerable) {
-            return false;
+            return;
         }
-        if (this.health.applyDamage(damage) <= 0) {
-            return false;
+        if (this.health.applyDamage(damage) > 0) {
+            this.hitInvulnerableTimer = PLAYER.HIT_INVULNERABLE;
         }
-        // NOTE: no invulnerability after a lethal hit: the round ends this frame and the world stops
-        // stepping, so the timer would never run out and the dead player would blink behind DEFEAT.
-        if (this.health.isDead) {
-            return true;
-        }
-        this.hitInvulnerableTimer = PLAYER.HIT_INVULNERABLE;
-        return true;
+    }
+
+    /**
+     * Ends the hit invulnerability and any dash in progress (not the dash cooldown).
+     * Called by reset() and by BattleWorld when the round ends, because the world is no longer
+     * stepped after that and running timers would otherwise freeze (endless blink or dash tint).
+     */
+    clearTimedEffects(): void {
+        this.hitInvulnerableTimer = 0;
+        this.dashTimer = 0;
     }
 
     // ---- Private ----

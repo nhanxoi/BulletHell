@@ -56,10 +56,11 @@ export class BattleWorld {
         this.hitBoss();
         this.hitPlayer();
         const outcome = this.outcome();
-        // NOTE: the world is not stepped after a defeat, so a dash caught mid-windup would leave the boss
-        // flashing behind the result screen forever; the flags are cleared once here instead.
+        // NOTE: the world is not stepped after the round ends, so running effects (boss windup flash,
+        // player blink or dash tint) would freeze behind the result screen; they are cleared once here.
         if (outcome !== BattleOutcome.None) {
             this.boss.clearActionFlags();
+            this.player.clearTimedEffects();
         }
         return outcome;
     }
