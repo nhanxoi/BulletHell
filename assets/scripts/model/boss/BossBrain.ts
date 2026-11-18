@@ -27,8 +27,8 @@ export class BossBrain {
     // PERF: each move/shot object is created on first use, then reused for the whole game.
     private readonly moves = new Map<BossMoveId, IBossMove>();
     private readonly shots = new Map<BossShotId, IBossShot>();
-    /** Phase applied so far this round; null before the first step. */
-    private phase: BossPhase | null = null;
+    /** False until the first step of a round has applied the starting phase. */
+    private hasStartedRound = false;
     private phaseConfig: PhaseConfig = BossConfig.PHASES[BossPhase.High];
     private move: IBossMove | null = null;
     private shot: IBossShot | null = null;
@@ -38,9 +38,9 @@ export class BossBrain {
 
     /** Forgets the previous round; the first step applies the phase and picks the actions. */
     reset(): void {
-        // NOTE: the old move's exit() is not needed here: BossModel.reset() clears the VFX flags,
-        // and enter() resets the move's own state when it is picked again.
-        this.phase = null;
+        // NOTE: the old move's exit() is not needed here: BossModel.reset() clears the VFX flags and
+        // the phase, and enter() resets the move's own state when it is picked again.
+        this.hasStartedRound = false;
         this.phaseConfig = BossConfig.PHASES[BossPhase.High];
         this.move = null;
         this.shot = null;
@@ -55,7 +55,7 @@ export class BossBrain {
      */
     step(dt: number, boss: BossModel, target: Point, bounds: ArenaBounds, emitter: IBulletEmitter): void {
         this.updatePhase(boss);
-        this.updateMoveChoice(dt, boss, target);
+        this.updateMoveChoice(dt, boss, target, bounds);
         this.updateShotChoice(dt);
         if (this.move !== null) {
             this.move.step(dt, boss, target, bounds);
@@ -69,12 +69,13 @@ export class BossBrain {
 
     private updatePhase(boss: BossModel): void {
         const next = BossBrain.phaseFromRatio(boss.health.ratio);
-        // NOTE: the phase only moves forward within a round. BossPhase values grow in the order
-        // High < Medium < Low, so a value not greater than the current one is ignored.
-        if (this.phase !== null && next <= this.phase) {
+        // NOTE: boss.phase is the only record of the phase (views read it too). It only moves forward
+        // within a round: BossPhase values grow in the order High < Medium < Low, so a value not
+        // greater than the current one is ignored, except on the first step, which must apply it.
+        if (this.hasStartedRound && next <= boss.phase) {
             return;
         }
-        this.phase = next;
+        this.hasStartedRound = true;
         boss.phase = next;
         this.phaseConfig = BossConfig.PHASES[next];
         // The new phase may not allow the current actions: re-pick both now (a running dash still finishes).
@@ -82,7 +83,7 @@ export class BossBrain {
         this.shotSwitchTimer = 0;
     }
 
-    private updateMoveChoice(dt: number, boss: BossModel, target: Point): void {
+    private updateMoveChoice(dt: number, boss: BossModel, target: Point, bounds: ArenaBounds): void {
         this.moveSwitchTimer -= dt;
         if (this.moveSwitchTimer > 0) {
             return;
@@ -99,7 +100,7 @@ export class BossBrain {
                 this.move.exit(boss);
             }
             this.move = next;
-            next.enter(boss, target);
+            next.enter(boss, target, bounds);
         }
         this.moveSwitchTimer = BossBrain.nextSwitchDelay(this.phaseConfig.MOVES.length);
     }
@@ -112,7 +113,7 @@ export class BossBrain {
         const next = this.getShot(randomItem(this.phaseConfig.SHOTS));
         if (next !== this.shot) {
             this.shot = next;
-            next.reset();
+            next.enter();
         }
         this.shotSwitchTimer = BossBrain.nextSwitchDelay(this.phaseConfig.SHOTS.length);
     }

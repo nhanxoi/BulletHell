@@ -9,9 +9,9 @@ import { BossPhase } from './BossPhase';
 import { BossShotId } from './BossShotId';
 import { ChaseMoveConfig, DashMoveConfig, FanShotConfig, PhaseConfig } from './BossConfigTypes';
 
-const CHASE: ChaseMoveConfig = { SPEED: 150 };
+const CHASE: ChaseMoveConfig = { SPEED: 150, STOP_DISTANCE: 60 };
 
-const DASH: DashMoveConfig = { WINDUP: 0.5, SPEED: 1200, DURATION: 0.45, RECOVER: 0.6 };
+const DASH: DashMoveConfig = { WINDUP: 0.5, SPEED: 1200, DURATION: 0.45, RECOVER: 0.6, MIN_AIM_DISTANCE: 1 };
 
 const SHOTS: Readonly<Record<BossShotId, FanShotConfig>> = {
     [BossShotId.NormalFan]: { COUNT: 6, SPREAD_DEG: 50, SPEED: 300, INTERVAL: 0.9 },

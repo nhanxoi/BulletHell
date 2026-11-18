@@ -2,7 +2,8 @@
  * FanShot.ts
  * Boss fan pattern: every INTERVAL seconds, COUNT bullets spread evenly over SPREAD_DEG, centred on
  * the direction to the player. One class serves every fan (Normal 6 bullets, Crazy 18 bullets);
- * the numbers come from FanShotConfig, so a new fan variant is config only.
+ * the numbers come from FanShotConfig, so a new fan variant needs no new class: a BossShotId value,
+ * a BossConfig.SHOTS entry and one BossActionFactory line (a missing one is a compile error).
  */
 import { FanShotConfig } from '../../config/BossConfigTypes';
 import { degToRad } from '../../utils/MathUtil';
@@ -31,8 +32,8 @@ export class FanShot implements IBossShot {
         this.angleStep = hasSpread ? spread / (config.COUNT - 1) : 0;
     }
 
-    /** Waits one full interval before the first volley. */
-    reset(): void {
+    /** Called when the shot becomes active: waits one full interval before the first volley. */
+    enter(): void {
         // NOTE: not 0 on purpose: switching shots never fires two volleys back to back, and a new
         // round gives the player a moment before the first bullets.
         this.cooldown = this.config.INTERVAL;

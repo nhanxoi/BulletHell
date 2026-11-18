@@ -1,8 +1,9 @@
 /**
  * BattleWorld.ts
  * The whole fight as plain data: arena, player, boss, their weapons and both bullet stores.
- * GameManager calls step() once per frame and reacts to the returned BattleOutcome; views read
- * the public members to draw. No engine import, so the rules can be reasoned about (and tested) alone.
+ * GameManager calls step() one or more times per frame (fixed-size sub-steps) and reacts to the
+ * returned BattleOutcome; views read the public members to draw. No engine import, so the rules
+ * can be reasoned about (and tested) alone.
  */
 import { GameConfig } from '../config/GameConfig';
 import { circleOverlapsBox } from '../utils/Collision';
@@ -54,7 +55,13 @@ export class BattleWorld {
         this.bossBullets.step(dt, this.bounds);
         this.hitBoss();
         this.hitPlayer();
-        return this.outcome();
+        const outcome = this.outcome();
+        // NOTE: the world is not stepped after a defeat, so a dash caught mid-windup would leave the boss
+        // flashing behind the result screen forever; the flags are cleared once here instead.
+        if (outcome !== BattleOutcome.None) {
+            this.boss.clearActionFlags();
+        }
+        return outcome;
     }
 
     /** Removes every bullet of both sides (boss defeated, new round). */

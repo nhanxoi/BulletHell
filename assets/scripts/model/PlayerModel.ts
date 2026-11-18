@@ -68,6 +68,11 @@ export class PlayerModel implements Point {
         if (this.health.applyDamage(damage) <= 0) {
             return false;
         }
+        // NOTE: no invulnerability after a lethal hit: the round ends this frame and the world stops
+        // stepping, so the timer would never run out and the dead player would blink behind DEFEAT.
+        if (this.health.isDead) {
+            return true;
+        }
         this.invulnerableTimer = PLAYER.HIT_INVULNERABLE;
         return true;
     }

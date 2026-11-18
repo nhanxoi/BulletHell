@@ -38,8 +38,8 @@ export class DashMove implements IBossMove {
     }
 
     /** Starts with a windup aimed at the target. */
-    enter(boss: BossModel, target: Point): void {
-        this.startWindup(boss, target);
+    enter(boss: BossModel, target: Point, bounds: ArenaBounds): void {
+        this.startWindup(boss, target, bounds);
     }
 
     /** Advances the current stage and switches stage when its time is up. */
@@ -56,7 +56,7 @@ export class DashMove implements IBossMove {
                 break;
             case DashStage.Recover:
                 if (this.stageTimer <= 0) {
-                    this.startWindup(boss, target);
+                    this.startWindup(boss, target, bounds);
                 }
                 break;
         }
@@ -70,15 +70,26 @@ export class DashMove implements IBossMove {
 
     // ---- Private ----
 
-    private startWindup(boss: BossModel, target: Point): void {
+    private startWindup(boss: BossModel, target: Point, bounds: ArenaBounds): void {
         // NOTE: the PDF says "toward the player's position at the moment of activation, direction locked
         // during the dash". Activation = the start of the windup, so the windup telegraphs a fixed
         // direction and the player can dodge sideways; aiming at the end of the windup would be unfair.
-        const dx = target.x - boss.x;
-        const dy = target.y - boss.y;
+        // NOTE: the aim point is the target clamped into the rectangle the boss centre can reach. The
+        // player can stand closer to a wall than the boss (smaller margin), so aiming at the raw position
+        // would point every dash into that wall and pin the boss there. Clamped, a boss already at the
+        // wall dashes along it (the wall-side component is exactly 0) instead of into it.
+        const dx = bounds.clampX(target.x, boss.halfSize) - boss.x;
+        const dy = bounds.clampY(target.y, boss.halfSize) - boss.y;
         const distanceSqr = dx * dx + dy * dy;
-        // NOTE: target exactly on the boss: no direction, so the dash stays in place.
-        const scale = distanceSqr > 0 ? 1 / Math.sqrt(distanceSqr) : 0;
+        const minDistance = this.config.MIN_AIM_DISTANCE;
+        // NOTE: the boss already stands on the aim point (e.g. both in the same corner): there is no
+        // direction to lock, and normalising would divide by ~0. Skip this dash and rest instead; the
+        // next windup re-aims after RECOVER seconds.
+        if (distanceSqr < minDistance * minDistance) {
+            this.startRecover(boss);
+            return;
+        }
+        const scale = 1 / Math.sqrt(distanceSqr);
         this.directionX = dx * scale;
         this.directionY = dy * scale;
         this.stage = DashStage.Windup;
@@ -97,6 +108,8 @@ export class DashMove implements IBossMove {
     private startRecover(boss: BossModel): void {
         this.stage = DashStage.Recover;
         this.stageTimer = this.config.RECOVER;
+        // Both flags: Recover is also entered straight from a skipped windup.
+        boss.isWindingUp = false;
         boss.isDashing = false;
     }
 

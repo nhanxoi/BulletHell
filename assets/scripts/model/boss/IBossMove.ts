@@ -13,8 +13,11 @@ export interface IBossMove {
     /** False while the move must not be cut (dash windup and charge); BossBrain then waits. */
     readonly isInterruptible: boolean;
 
-    /** Called when the move becomes active; resets its own state. */
-    enter(boss: BossModel, target: Point): void;
+    /**
+     * Called when the move becomes active; resets its own state.
+     * @param bounds Arena, for moves that aim at a point the boss can actually reach (DashMove).
+     */
+    enter(boss: BossModel, target: Point, bounds: ArenaBounds): void;
 
     /** Advances the move by one frame, writing the boss position. */
     step(dt: number, boss: BossModel, target: Point, bounds: ArenaBounds): void;

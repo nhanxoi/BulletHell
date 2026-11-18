@@ -21,8 +21,8 @@ export function randomRange(min: number, max: number): number {
 
 /**
  * Picks one element at random.
- * NOTE: `items` must not be empty; callers pass config lists that always hold at least one id.
+ * NOTE: the non-empty tuple type makes an empty list a compile error, so the result is never undefined.
  */
-export function randomItem<T>(items: readonly T[]): T {
+export function randomItem<T>(items: readonly [T, ...T[]]): T {
     return items[Math.floor(Math.random() * items.length)];
 }

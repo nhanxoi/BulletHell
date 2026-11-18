@@ -31,6 +31,11 @@ export class BossModel implements Point {
         this.y = BOSS.START_Y;
         this.health.reset();
         this.phase = BossPhase.High;
+        this.clearActionFlags();
+    }
+
+    /** Clears the windup and dash flags, so views stop flashing the boss (round over, new round). */
+    clearActionFlags(): void {
         this.isWindingUp = false;
         this.isDashing = false;
     }
