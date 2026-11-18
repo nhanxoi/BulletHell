@@ -1,7 +1,8 @@
 /**
  * KeyboardInput.ts
- * Turns WASD / arrow key events into the keyboard axes of InputState (keyX, keyY).
- * It only records which keys are held; PlayerModel decides how that moves the player.
+ * Turns WASD / arrow key events into the keyboard axes of InputState (keyX, keyY), and Space /
+ * Shift presses into a dash request (InputState.isDashRequested).
+ * It only records input; PlayerModel decides how that moves the player.
  *
  * Attach to node GameRoot.
  *
@@ -15,7 +16,7 @@ import { _decorator, Component, EventKeyboard, Game, game, Input, input, KeyCode
 import { GameManager } from '../controller/GameManager';
 const { ccclass, property } = _decorator;
 
-/** Writes held movement keys into the shared InputState. */
+/** Writes held movement keys and dash presses into the shared InputState. */
 @ccclass('KeyboardInput')
 export class KeyboardInput extends Component {
     @property(GameManager)
@@ -55,6 +56,12 @@ export class KeyboardInput extends Component {
     // ---- Private ----
 
     private onKeyDown(event: EventKeyboard): void {
+        // NOTE: KEY_DOWN fires once per physical press; the browser's auto-repeat arrives as
+        // KEY_PRESSING (not listened to), so holding Space does not chain dashes.
+        if (this.isDashKey(event.keyCode)) {
+            this.gameManager.requestDash();
+            return;
+        }
         this.setKeyHeld(event.keyCode, true);
     }
 
@@ -65,6 +72,10 @@ export class KeyboardInput extends Component {
     /** The page was hidden: KEY_UP for the held keys will never arrive. */
     private onGameHide(): void {
         this.releaseAllKeys();
+    }
+
+    private isDashKey(keyCode: KeyCode): boolean {
+        return keyCode === KeyCode.SPACE || keyCode === KeyCode.SHIFT_LEFT || keyCode === KeyCode.SHIFT_RIGHT;
     }
 
     private releaseAllKeys(): void {

@@ -45,6 +45,12 @@ export const GameConfig = {
         BULLET_SPEED: 900,
         BULLET_RADIUS: 8,
         BULLET_DAMAGE: 10,
+        /** Dash speed, px/s; the dash covers DASH_SPEED * DASH_DURATION = 165 px. */
+        DASH_SPEED: 1100,
+        /** Seconds a dash lasts; the player is invulnerable for all of it. */
+        DASH_DURATION: 0.15,
+        /** Seconds from the start of one dash until the next one is allowed. */
+        DASH_COOLDOWN: 1.0,
     },
     BOSS: {
         /** Half of the square side, px. */
@@ -89,6 +95,8 @@ export const GameConfig = {
     },
     COLORS: {
         PLAYER: '#3B82F6',
+        /** Lighter player tint while dashing. */
+        PLAYER_DASH: '#BFDBFE',
         PLAYER_BULLET: '#22C55E',
         BOSS: '#EF4444',
         BOSS_BULLET: '#F97316',

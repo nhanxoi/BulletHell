@@ -85,6 +85,17 @@ export class GameManager extends Component {
         this.setState(GameState.Playing);
     }
 
+    /**
+     * Asks the player to dash on the next simulation step (keyboard or on-screen button).
+     * Ignored outside Playing, so a press on the result screen does not dash at the start of the next round.
+     */
+    requestDash(): void {
+        if (this._state !== GameState.Playing) {
+            return;
+        }
+        this._input.isDashRequested = true;
+    }
+
     // ---- Private ----
 
     /**
