@@ -1,0 +1,161 @@
+# BulletHell — 2D boss fight demo (Cocos Creator 3.7.4)
+
+A top-down bullet-hell boss battle made for the FGS Client Developer Exercise.
+Player = blue circle, player bullets = green circles, boss = red square, boss bullets = orange circles,
+inside a large rectangular arena closed by four walls.
+
+## How to run
+
+- **Editor**: open the folder with Cocos Creator **3.7.4** (Dashboard → Projects → Add), open
+  `assets/scenes/Main.scene`, press Preview.
+- **Web build**: `build/web-mobile/` (not committed; produce it with Project → Build → Web Mobile, or
+  `CocosCreator.exe --project <this folder> --build "platform=web-mobile;debug=false"`), then serve it with any
+  static server, e.g. `npx http-server build/web-mobile -p 8080`, and open `http://localhost:8080`.
+
+### Controls
+
+| Platform | Move | Shoot |
+| --- | --- | --- |
+| Desktop | WASD or arrow keys | automatic when the boss is within range |
+| Touch devices | drag anywhere on the left half of the screen (floating joystick) | automatic |
+
+## Features
+
+Required by the brief, all done:
+- Simple shapes with the required colours; large enclosed arena (2400 x 1600 px) with four walls.
+- Player: free movement clamped inside the walls, auto-shoots the boss when it is within 750 px, fixed HP (100),
+  1 s of invulnerability (blinking) after a hit.
+- Boss moves: **Normal** (chases the player continuously) and **Dash** (windup flash, then a high-speed dash toward
+  where the player was when the dash was activated, direction locked during the dash, stops at walls).
+- Boss shots: **Normal** (6 bullets in a fan toward the player) and **Crazy** (18 bullets in a wider fan).
+- Boss behaviour by HP ratio: **High** (>= 60%) Normal move + Normal shot; **Medium** (>= 30%) random Normal/Dash
+  move and random Normal/Crazy shot, re-picked independently every 2–4 s; **Low** (< 30%) Dash + Crazy.
+- Boss defeated → every bullet on the map is removed instantly.
+- Game Over screen (VICTORY / DEFEAT) with a Restart button when either side dies.
+- All tuning values in `assets/scripts/config/` (no magic numbers in logic).
+
+Extra:
+- Visual feedback: boss tint darkens per phase, white flash during the dash windup, purple tint while dashing,
+  short flash when the boss is hit, the boss disappears when defeated, player blink while invulnerable, camera shake
+  when the player is hit, HP bars and a phase label.
+- Smooth follow camera clamped to the arena.
+- Virtual joystick on touch devices (the keyboard hint is hidden there).
+
+## Architecture
+
+```
+assets/scripts/
+  config/      GameConfig (all numbers), BossConfig (moves, shots, phase table), id enums
+  core/        EventBus (global EventTarget), GameEvents (every event name + payload)
+  model/       Pure TypeScript simulation, never imports 'cc'
+    boss/      IBossMove, IBossShot, ChaseMove, DashMove, FanShot, BossActionFactory, BossBrain
+  controller/  GameManager: owns BattleWorld + InputState, state machine, the only gameplay update()
+  view/        Components that draw the model (lateUpdate)
+  input/       KeyboardInput, VirtualJoystick: write InputState when input events arrive
+  ui/          HUD, Game Over panel, virtual joystick (event driven)
+  utils/       Collision, MathUtil
+```
+
+Dependencies go one way: `ui`, `view`, `input` → `controller` → `model` → `config`, `core`, `utils`.
+
+### One frame
+
+1. Input components (`KeyboardInput`, `VirtualJoystick`) write `InputState` when events arrive.
+2. `GameManager.update(dt)` (only while `Playing`) splits the frame into fixed sub-steps of at most 50 ms and calls
+   `BattleWorld.step(step, input)` for each:
+   player moves → player weapon → `BossBrain` (phase from HP, pick move/shot, step them) → bullet stores move and drop
+   bullets at walls → collisions → returns a `BattleOutcome`.
+3. `GameManager` emits `PLAYER_HP_CHANGED` / `BOSS_HP_CHANGED` / `BOSS_PHASE_CHANGED` / `*_HIT` only when a value
+   changed; on `BossDefeated` it clears all bullets, then emits `GAME_OVER`.
+4. In `lateUpdate`, views copy model state onto nodes: `PlayerView`, `BossView`, two `BulletLayerView`s,
+   `CameraFollow`.
+5. UI only reacts to events (`HealthBarView`, `PhaseLabelView`, `GameOverPanel`).
+
+```mermaid
+flowchart LR
+  Input[KeyboardInput / VirtualJoystick] -->|writes| IS[InputState]
+  GM[GameManager.update] -->|step| BW[BattleWorld]
+  IS --> BW
+  BW --> Brain[BossBrain] --> Moves[IBossMove] & Shots[IBossShot]
+  GM -->|EventBus| UI[HealthBar / PhaseLabel / GameOverPanel / CameraFollow shake]
+  BW -->|read in lateUpdate| Views[PlayerView / BossView / BulletLayerView / CameraFollow]
+```
+
+### Scene (`Main.scene`)
+
+- `GameRoot`: GameManager, KeyboardInput.
+- `World` (RenderRoot2D, layer DEFAULT): `GameCamera` (orthographic, follows the player), floor and four walls,
+  bullet layers, boss, player.
+- `Canvas` (layer UI_2D) with its own `UICamera` drawn on top: HP bars, phase label, joystick, Game Over popup.
+
+### Extending the boss
+
+- New fan variant: one `BossShotId` value + one entry in `BossConfig.SHOTS` + add the id to a phase.
+- New pattern type (e.g. a ring): a class implementing `IBossShot` + enum value + one line in `BossActionFactory`.
+- New move: same through `IBossMove`. Phases are data only (`BossConfig.PHASES`).
+- Typed `Record<Enum, ...>` tables make a forgotten entry a compile error.
+
+## Decisions and trade-offs
+
+- **Simulation separated from rendering.** All rules live in `model/` as plain TypeScript; components only draw.
+  Easier to reason about and test; cost: one copy step per frame in the views.
+- **Custom collision math instead of the physics engine.** Only two targets exist (player circle, boss square), so
+  circle-vs-circle and circle-vs-box on squared distances is O(n) and cheaper than physics bodies per bullet.
+  No spatial grid: with < 200 bullets and one target per side it would add complexity for nothing.
+- **Bullets as data.** Each side keeps bullets in fixed-capacity `Float32Array`s (no object per bullet, O(1)
+  swap-remove). Rendering uses a preallocated set of node slots per side: nodes are created once (preload + grow up
+  to capacity), then only moved and toggled; nothing is instantiated or destroyed during the fight.
+- **One update for the whole game.** `GameManager` is the only gameplay `update`; about six `lateUpdate`s in total
+  no matter how many bullets there are.
+- **Sub-stepping.** A frame is simulated in steps of at most 50 ms, so a slow device (15 fps) still runs at real
+  speed and fast bullets cannot skip through a target. Frames longer than 250 ms (GC, debugger) are cut, not
+  fast-forwarded.
+- **Restart without reloading the scene.** `GameOver → Ready → Playing`; `BattleWorld.reset()` resets every model.
+- **HP phase thresholds 60% / 30%**, phases only move forward within a round, and a dash is never interrupted by a
+  random re-pick (the brain retries once the move is interruptible).
+- **Dash direction** is locked when the windup starts (the "moment of activation"), so the windup flash telegraphs
+  a fixed direction the player can dodge. The boss aims at the player position clamped into the area its centre can
+  reach, so a player hugging a wall makes the boss dash along the wall instead of pinning it there.
+- **Chase stop distance (60 px)**: the boss keeps touching (contact damage) but never sits on the player's centre.
+- **Contact damage**: touching the boss costs 20 HP; after any hit the player is invulnerable for 1 s and boss
+  bullets pass through instead of being consumed.
+- **Same-frame double kill** counts as a victory (boss death is checked first).
+- **No pause state**: not required, and it avoids `director.pause()` side effects.
+- **Config as TypeScript `as const` objects** rather than JSON: type-checked (a missing phase/shot entry or an empty
+  phase list is a compile error), no async loading or parse-failure path. Trade-off: changing a value needs a rebuild;
+  moving `GameConfig` to a `JsonAsset` with a validated loader would allow live tuning.
+- **Joystick shown by touch support** (`sys.hasFeature(INPUT_TOUCH)`), not by the user agent, so iPads and touch
+  laptops also get it; the keyboard always works.
+- **Engine feature cropping**: physics, spine, dragonbones, tiled map, video, webview and particles are disabled to
+  keep the build small.
+
+## Memory management
+
+| Opened | Closed | Where |
+| --- | --- | --- |
+| `EventBus.on` (HealthBarView, PhaseLabelView, GameOverPanel, CameraFollow, BossView) | `EventBus.off` with the same handler and target | `onEnable` ↔ `onDisable` |
+| `input.on` KEY_DOWN / KEY_UP, `game.on(EVENT_HIDE)` (KeyboardInput) | `input.off` / `game.off`, held keys released | `onEnable` ↔ `onDisable` |
+| `node.on` touch events (VirtualJoystick), Restart button click (GameOverPanel) | `node.off` | `onEnable` ↔ `onDisable` |
+| `view.on('canvas-resize')` (CameraFollow) | `view.off` | `onEnable` ↔ `onDisable` |
+| Bullet slots `instantiate(prefab)` (BulletLayerView) | children of the layer, destroyed with it; slot array cleared | `onDestroy` |
+| Bullet stores (`Float32Array`) | allocated once per world, reused across rounds (`clear()` only resets the count) | — |
+
+- No tweens, no schedules, no dynamic asset loading, no `static` references to nodes.
+- Checked at runtime: 20 consecutive Game Over → Restart cycles keep the node count constant (266) and the JS heap
+  flat (16.0 MB → 15.7 MB).
+
+## Performance notes
+
+- No allocation in any per-frame path (update, lateUpdate, touch move): module-level scratch objects, cached colours,
+  values only assigned to the engine when they change (`node.active`, sprite colour, label string).
+- Squared distances for range and collision tests; `atan2` once per volley, not per bullet.
+- Two white textures (circle, square) tinted by `Sprite.color`, so the world batches into a few draw calls
+  (dynamic atlas on web).
+- Bullet node slots: 32 player / 200 boss created at load; a long simulated fight peaked below 100 boss bullets,
+  and if a pattern ever needs more, slots grow once up to the store capacity (400).
+
+## TODO / not done
+
+- Player dash (optional in the brief).
+- Audio.
+- Desktop build: needs Visual Studio (not installed). Android build: see the build notes in the submission mail.
