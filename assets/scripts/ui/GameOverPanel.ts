@@ -1,8 +1,8 @@
 /**
  * GameOverPanel.ts
  * Game Over screen: shows "GAME OVER" with the result (boss defeated or player defeated) when the
- * round ends, and restarts the round when Restart is clicked. The component sits on an always-active holder node so it can listen while
- * the panel itself is hidden.
+ * round ends, and restarts the round when Restart is clicked. The component sits on an
+ * always-active holder node so it can listen while the panel itself is hidden.
  *
  * Attach to node Popups; `panel` is its child (inactive by default) containing the title and button.
  */

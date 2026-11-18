@@ -56,7 +56,7 @@ export class VirtualJoystick extends Component {
         }
         this.touchArea = this.node.getComponent(UITransform);
         if (!this.gameManager || !this.base || !this.knob || !this.keyboardHint || !this.touchArea) {
-            console.error(`[VirtualJoystick] gameManager, base, knob, keyboardHint or UITransform missing on node "${this.node.name}"`);
+            console.error(`[VirtualJoystick] a reference or the UITransform is missing on node "${this.node.name}"`);
             this.enabled = false;
             return;
         }

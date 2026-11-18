@@ -61,14 +61,14 @@ Optional and bonus items, also done:
 
 ```
 assets/scripts/
-  config/      GameConfig (all numbers), BossConfig (moves, shots, phase table), id enums
+  config/      GameConfig (all numbers), BossConfig (moves, shots, phase table), AudioConfig, id enums
   core/        EventBus (global EventTarget), GameEvents (every event name + payload)
   model/       Pure TypeScript simulation, never imports 'cc'
     boss/      IBossMove, IBossShot, ChaseMove, DashMove, FanShot, BossActionFactory, BossBrain
   controller/  GameManager: owns BattleWorld + InputState, state machine, the only gameplay update()
-  view/        Components that draw the model (lateUpdate)
-  input/       KeyboardInput, VirtualJoystick: write InputState when input events arrive
-  ui/          HUD, Game Over panel, virtual joystick (event driven)
+  view/        Components that draw the model (lateUpdate) and AudioPlayer (sound)
+  input/       KeyboardInput, VirtualJoystick, DashButton: turn input events into InputState / dash requests
+  ui/          HUD and Game Over panel (event driven)
   utils/       Collision, MathUtil
 ```
 
@@ -76,7 +76,9 @@ Dependencies go one way: `ui`, `view`, `input` → `controller` → `model` → 
 
 ### One frame
 
-1. Input components (`KeyboardInput`, `VirtualJoystick`) write `InputState` when events arrive.
+1. Input components write the movement axes of `InputState` when events arrive (`KeyboardInput`,
+   `VirtualJoystick`); a dash key or the DASH button calls `GameManager.requestDash()`, which only accepts it
+   while playing.
 2. `GameManager.update(dt)` (only while `Playing`) splits the frame into fixed sub-steps of at most 50 ms and calls
    `BattleWorld.step(step, input)` for each:
    player moves → player weapon → `BossBrain` (phase from HP, pick move/shot, step them) → bullet stores move and drop
@@ -99,10 +101,11 @@ flowchart LR
 
 ### Scene (`Main.scene`)
 
-- `GameRoot`: GameManager, KeyboardInput.
+- `GameRoot`: GameManager, KeyboardInput, AudioPlayer with two AudioSources (music, effects).
 - `World` (RenderRoot2D, layer DEFAULT): `GameCamera` (orthographic, follows the player), floor and four walls,
   bullet layers, boss, player.
-- `Canvas` (layer UI_2D) with its own `UICamera` drawn on top: HP bars, phase label, joystick, Game Over popup.
+- `Canvas` (layer UI_2D) with its own `UICamera` drawn on top: HP bars, phase label, controls hint, joystick,
+  DASH button, Game Over popup.
 
 ### Extending the boss
 
@@ -168,8 +171,9 @@ flowchart LR
 - No allocation in any per-frame path (update, lateUpdate, touch move): module-level scratch objects, cached colours,
   values only assigned to the engine when they change (`node.active`, sprite colour, label string).
 - Squared distances for range and collision tests; `atan2` once per volley, not per bullet.
-- Two white textures (circle, square) tinted by `Sprite.color`, so the world batches into a few draw calls
-  (dynamic atlas on web).
+- Two white textures (circle, square) packed into one **Auto Atlas** at build time and tinted by `Sprite.color`,
+  so the whole world batches into very few draw calls on every platform (the runtime dynamic atlas is disabled
+  on native builds, so it is not relied on).
 - Bullet node slots: 32 player / 200 boss created at load; a long simulated fight peaked below 100 boss bullets,
   and if a pattern ever needs more, slots grow once up to the store capacity (400).
 

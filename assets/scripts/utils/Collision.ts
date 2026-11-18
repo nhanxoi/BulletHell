@@ -21,7 +21,9 @@ export function circleOverlapsCircle(ax: number, ay: number, ar: number, bx: num
  * @param boxY     Square centre.
  * @param halfSize Half of the square side.
  */
-export function circleOverlapsBox(cx: number, cy: number, r: number, boxX: number, boxY: number, halfSize: number): boolean {
+export function circleOverlapsBox(
+    cx: number, cy: number, r: number, boxX: number, boxY: number, halfSize: number,
+): boolean {
     // The point of the square closest to the circle centre; the circle overlaps if that point is inside it.
     const nearestX = clamp(cx, boxX - halfSize, boxX + halfSize);
     const nearestY = clamp(cy, boxY - halfSize, boxY + halfSize);

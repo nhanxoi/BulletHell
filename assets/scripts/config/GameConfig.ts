@@ -6,7 +6,10 @@
  */
 export const GameConfig = {
     FRAME: {
-        /** Longest single simulation step, seconds. Longer frames are split into steps of this size so bullets cannot tunnel. */
+        /**
+         * Longest single simulation step, seconds. Longer frames are split into steps of this size,
+         * so fast bullets cannot tunnel through a target.
+         */
         MAX_DT: 0.05,
         /**
          * Longest real frame that is simulated, seconds (up to 5 steps). Anything longer (tab switch,
