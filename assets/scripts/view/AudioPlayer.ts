@@ -9,9 +9,10 @@
  *
  * NOTE (web autoplay): browsers keep the AudioContext suspended until a user gesture. In Cocos 3.7
  * the web player (pal/audio/web/player-web) resumes it on the first `touchend` / `mouseup` on the
- * GameCanvas; a music `play()` called before that is queued and starts then, and every call is
- * wrapped in `.catch`, so nothing throws. Keyboard is not one of those gestures, so this component
- * also calls `play()` again on a key press, which retries `context.resume()` (see onKeyDown).
+ * GameCanvas; the music `play()` called before that is queued and starts then, and every call is
+ * wrapped in `.catch`, so nothing throws. A key press is a valid gesture for the browser but the
+ * engine does not listen to it, so the first key press plays a silent one-shot: a one-shot calls
+ * `context.resume()` directly, which unlocks the queued music for keyboard-only players.
  */
 import { _decorator, AudioClip, AudioSource, Component, input, Input } from 'cc';
 import { AudioConfig } from '../config/AudioConfig';
@@ -177,12 +178,15 @@ export class AudioPlayer extends Component {
     }
 
     /**
-     * Keyboard players never click the canvas, so the engine would keep the AudioContext locked.
-     * Calling play() again re-runs the engine's context.resume() inside a key gesture.
+     * First key press: unlock the AudioContext for keyboard-only players (see the NOTE in the header).
+     * NOTE: calling musicSource.play() again would not help: the engine only queues it behind the
+     * first, still pending play(). A zero-volume one-shot resumes the context inside this gesture.
      */
     private onKeyDown(): void {
-        if (this.gameManager.state === GameState.Playing && !this.musicSource.playing) {
-            this.musicSource.play();
+        // CLEANUP: one unlock is enough; pairs with input.on in onEnable (also removed in onDisable).
+        input.off(Input.EventType.KEY_DOWN, this.onKeyDown, this);
+        if (!this.musicSource.playing) {
+            this.sfxSource.playOneShot(this.playerDashClip, 0);
         }
     }
 
