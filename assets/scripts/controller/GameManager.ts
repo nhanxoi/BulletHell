@@ -1,0 +1,162 @@
+/**
+ * GameManager.ts
+ * Entry point of a play session: owns the simulation (BattleWorld) and the player input
+ * (InputState), runs the only gameplay update of the game and drives the state machine.
+ * Changes are broadcast through EventBus so HUD, popups and camera never poll the model.
+ *
+ * Attach to node GameRoot in Main.scene. Views read `world` in lateUpdate; input components
+ * write `input` when input events arrive.
+ */
+import { _decorator, Component } from 'cc';
+import { GameConfig } from '../config/GameConfig';
+import { BossPhase } from '../config/BossPhase';
+import { EventBus } from '../core/EventBus';
+import { GameEvents } from '../core/GameEvents';
+import { BattleOutcome } from '../model/BattleOutcome';
+import { BattleWorld } from '../model/BattleWorld';
+import { GameState } from '../model/GameState';
+import { Health } from '../model/Health';
+import { InputState } from '../model/InputState';
+const { ccclass } = _decorator;
+
+/** Owns the battle simulation and the session state machine; the only writer of GameState. */
+@ccclass('GameManager')
+export class GameManager extends Component {
+    private _world: BattleWorld | null = null;
+    // NOTE: a plain data object with no side effects, so it is safe to create it with the component;
+    // input components can then write to it without a null check.
+    private readonly _input = new InputState();
+    private _state = GameState.Ready;
+    /** Last values broadcast to the HUD, so events are only emitted when something changed. */
+    private lastPlayerHp = 0;
+    private lastBossHp = 0;
+    private lastBossPhase = BossPhase.High;
+
+    // ---- Lifecycle ----
+
+    protected onLoad(): void {
+        // NOTE: created here, not in a field initializer, because the editor also constructs
+        // components when it opens the scene and does not need a running simulation.
+        this._world = new BattleWorld();
+    }
+
+    protected start(): void {
+        // NOTE: start() instead of onLoad() so every view has registered its listeners (onEnable)
+        // before the first round broadcasts its initial HP and phase.
+        this.startGame();
+    }
+
+    protected update(dt: number): void {
+        if (this._state !== GameState.Playing || !this._world) {
+            return;
+        }
+        // NOTE: a long frame (tab switch, GC pause) is clamped so fast bullets cannot skip a target.
+        const step = Math.min(dt, GameConfig.FRAME.MAX_DT);
+        const outcome = this._world.step(step, this._input);
+        this.emitChanges(this._world);
+        this.handleOutcome(outcome, this._world);
+    }
+
+    // ---- Public API ----
+
+    /** The battle simulation; null only before onLoad has run. */
+    get world(): BattleWorld | null {
+        return this._world;
+    }
+
+    /** Latest player input, written by KeyboardInput and VirtualJoystick. */
+    get input(): InputState {
+        return this._input;
+    }
+
+    /** Current state, read-only for other classes. */
+    get state(): GameState {
+        return this._state;
+    }
+
+    /** Starts a new round without reloading the scene. Also used by the Restart button. */
+    startGame(): void {
+        if (!this._world) {
+            return;
+        }
+        // NOTE: passing through Ready lets every view clear the previous round (panel, camera snap).
+        this.setState(GameState.Ready);
+        this._world.reset();
+        this.emitInitialValues(this._world);
+        this.setState(GameState.Playing);
+    }
+
+    // ---- Private ----
+
+    /** Broadcasts the start values so the HUD never shows numbers from the previous round. */
+    private emitInitialValues(world: BattleWorld): void {
+        const playerHealth = world.player.health;
+        const bossHealth = world.boss.health;
+        this.lastPlayerHp = playerHealth.current;
+        this.lastBossHp = bossHealth.current;
+        this.lastBossPhase = world.boss.phase;
+        EventBus.emit(GameEvents.PLAYER_HP_CHANGED, playerHealth.current, playerHealth.max);
+        EventBus.emit(GameEvents.BOSS_HP_CHANGED, bossHealth.current, bossHealth.max);
+        EventBus.emit(GameEvents.BOSS_PHASE_CHANGED, this.lastBossPhase);
+    }
+
+    /** Emits HP / phase / hit events for what changed during this frame. */
+    private emitChanges(world: BattleWorld): void {
+        // PERF: compare with the last broadcast value, so the HUD is not updated every frame.
+        this.lastPlayerHp = this.emitHealthChange(
+            world.player.health, this.lastPlayerHp, GameEvents.PLAYER_HP_CHANGED, GameEvents.PLAYER_HIT);
+        this.lastBossHp = this.emitHealthChange(
+            world.boss.health, this.lastBossHp, GameEvents.BOSS_HP_CHANGED, GameEvents.BOSS_HIT);
+        if (world.boss.phase !== this.lastBossPhase) {
+            this.lastBossPhase = world.boss.phase;
+            EventBus.emit(GameEvents.BOSS_PHASE_CHANGED, this.lastBossPhase);
+        }
+    }
+
+    /**
+     * Emits the HP event (and the hit event when HP dropped) if the value changed.
+     * @returns The HP value to remember as "last broadcast".
+     */
+    private emitHealthChange(health: Health, lastHp: number, hpEvent: string, hitEvent: string): number {
+        const hp = health.current;
+        if (hp === lastHp) {
+            return lastHp;
+        }
+        if (hp < lastHp) {
+            EventBus.emit(hitEvent);
+        }
+        EventBus.emit(hpEvent, hp, health.max);
+        return hp;
+    }
+
+    private handleOutcome(outcome: BattleOutcome, world: BattleWorld): void {
+        switch (outcome) {
+            case BattleOutcome.BossDefeated:
+                // Requirement: when the boss dies every bullet on the map disappears instantly.
+                world.clearAllBullets();
+                this.endGame(true);
+                break;
+            case BattleOutcome.PlayerDefeated:
+                this.endGame(false);
+                break;
+            default:
+                break;
+        }
+    }
+
+    /** Stops the simulation (update() only runs while Playing) and shows the result. */
+    private endGame(isVictory: boolean): void {
+        this.setState(GameState.GameOver);
+        EventBus.emit(GameEvents.GAME_OVER, isVictory);
+    }
+
+    /**
+     * Single place where the state changes, so every transition is easy to trace.
+     * NOTE: no "same state" early return: the first round starts while the state is already
+     * Ready, and views still need that Ready broadcast to reset themselves.
+     */
+    private setState(next: GameState): void {
+        this._state = next;
+        EventBus.emit(GameEvents.STATE_CHANGED, next);
+    }
+}
