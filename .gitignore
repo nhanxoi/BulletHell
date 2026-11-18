@@ -15,3 +15,6 @@ native/engine/**/build/
 .DS_Store
 Thumbs.db
 node_modules/
+
+# Editor-generated help link
+.creator/asset-template/
