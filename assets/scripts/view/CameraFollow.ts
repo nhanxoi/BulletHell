@@ -1,7 +1,8 @@
 /**
  * CameraFollow.ts
  * Top-down camera: smoothly follows the player, never shows anything outside the outer walls,
- * snaps to the player when a round starts and shakes briefly when the player is hit. Its zoom
+ * snaps to the player when a round starts and shakes: briefly when the player is hit, harder when
+ * the boss enters a new phase and hardest when the boss is defeated. Its zoom
  * adapts to the screen shape so at least CAMERA.MIN_VIEW_WIDTH x MIN_VIEW_HEIGHT world px are
  * visible on any phone, tablet or window.
  * It reads the player position from the model (not from the Player node), so it does not depend
@@ -10,6 +11,7 @@
  * Attach to node GameCamera (orthographic Camera of the World).
  */
 import { _decorator, Camera, Component, view } from 'cc';
+import { FeedbackConfig } from '../config/FeedbackConfig';
 import { GameConfig } from '../config/GameConfig';
 import { ViewEvents } from '../core/ViewEvents';
 import { EventBus } from '../core/EventBus';
@@ -19,7 +21,7 @@ import { GameState } from '../model/GameState';
 import { clamp } from '../utils/MathUtil';
 const { ccclass, property } = _decorator;
 
-/** Eases the camera toward the player, clamped to the arena, with a time-based hit shake. */
+/** Eases the camera toward the player, clamped to the arena, with time-based shakes. */
 @ccclass('CameraFollow')
 export class CameraFollow extends Component {
     @property(GameManager)
@@ -36,6 +38,9 @@ export class CameraFollow extends Component {
     private limitY = 0;
     /** The camera keeps its original z (2D cameras sit in front of the scene). */
     private cameraZ = 0;
+    /** Current shake: starting offset px, total and remaining seconds (it fades out linearly). */
+    private shakeAmplitude = 0;
+    private shakeDuration = 0;
     private shakeTimeLeft = 0;
     /** True when the next frame must jump to the player instead of easing toward it. */
     private isSnapPending = true;
@@ -55,13 +60,17 @@ export class CameraFollow extends Component {
     protected onEnable(): void {
         EventBus.on(GameEvents.STATE_CHANGED, this.onStateChanged, this);
         EventBus.on(GameEvents.PLAYER_HIT, this.onPlayerHit, this);
+        EventBus.on(GameEvents.BOSS_PHASE_CHANGED, this.onBossPhaseChanged, this);
+        EventBus.on(GameEvents.GAME_OVER, this.onGameOver, this);
         view.on(ViewEvents.CANVAS_RESIZE, this.onCanvasResize, this);
     }
 
     protected onDisable(): void {
-        // CLEANUP: pairs with the three on() calls in onEnable; same event, handler and target.
+        // CLEANUP: pairs with the five on() calls in onEnable; same event, handler and target.
         EventBus.off(GameEvents.STATE_CHANGED, this.onStateChanged, this);
         EventBus.off(GameEvents.PLAYER_HIT, this.onPlayerHit, this);
+        EventBus.off(GameEvents.BOSS_PHASE_CHANGED, this.onBossPhaseChanged, this);
+        EventBus.off(GameEvents.GAME_OVER, this.onGameOver, this);
         view.off(ViewEvents.CANVAS_RESIZE, this.onCanvasResize, this);
         this.shakeTimeLeft = 0;
     }
@@ -95,8 +104,7 @@ export class CameraFollow extends Component {
             return;
         }
         this.shakeTimeLeft = Math.max(0, this.shakeTimeLeft - dt);
-        // The shake fades out linearly over its duration.
-        const strength = GameConfig.CAMERA.SHAKE_AMPLITUDE * (this.shakeTimeLeft / GameConfig.CAMERA.SHAKE_DURATION);
+        const strength = this.currentShakeStrength();
         const offsetX = (Math.random() * 2 - 1) * strength;
         const offsetY = (Math.random() * 2 - 1) * strength;
         this.node.setPosition(this.followX + offsetX, this.followY + offsetY, this.cameraZ);
@@ -136,7 +144,40 @@ export class CameraFollow extends Component {
         this.shakeTimeLeft = 0;
     }
 
+    /** Offset of the running shake right now; it fades out linearly over its duration. */
+    private currentShakeStrength(): number {
+        // NOTE: guards a zero duration in config instead of dividing by 0.
+        if (this.shakeDuration <= 0) {
+            return 0;
+        }
+        return this.shakeAmplitude * (this.shakeTimeLeft / this.shakeDuration);
+    }
+
+    /** Starts a shake unless a stronger one is still running (a hit must not cut the phase shake short). */
+    private startShake(amplitude: number, duration: number): void {
+        if (this.currentShakeStrength() > amplitude) {
+            return;
+        }
+        this.shakeAmplitude = amplitude;
+        this.shakeDuration = duration;
+        this.shakeTimeLeft = duration;
+    }
+
     private onPlayerHit(): void {
-        this.shakeTimeLeft = GameConfig.CAMERA.SHAKE_DURATION;
+        this.startShake(GameConfig.CAMERA.SHAKE_AMPLITUDE, GameConfig.CAMERA.SHAKE_DURATION);
+    }
+
+    private onBossPhaseChanged(): void {
+        // NOTE: the starting phase is also broadcast while Ready; only a change mid-round shakes.
+        if (this.gameManager.state !== GameState.Playing) {
+            return;
+        }
+        this.startShake(FeedbackConfig.PHASE_SHAKE_AMPLITUDE, FeedbackConfig.PHASE_SHAKE_DURATION);
+    }
+
+    private onGameOver(isVictory: boolean): void {
+        if (isVictory) {
+            this.startShake(FeedbackConfig.VICTORY_SHAKE_AMPLITUDE, FeedbackConfig.VICTORY_SHAKE_DURATION);
+        }
     }
 }
