@@ -1,8 +1,8 @@
 /**
  * AudioPlayer.ts
  * Plays the background music and every sound effect of the fight. Listens to GameManager events
- * (state, hits, phase, game over) and reads the dash flags of the models in lateUpdate, so the
- * game rules never know that sound exists. Display-side only, it owns no game rules.
+ * (state, shots, volleys, hits, shield pickups and breaks, phase, game over) and reads the dash flags of the models in
+ * lateUpdate, so the game rules never know that sound exists. Display-side only, it owns no game rules.
  *
  * Attach to node GameRoot with two AudioSource components: one for the music, one for effects.
  * Volumes come from AudioConfig and are applied in code, so the inspector values do not matter.
@@ -20,6 +20,7 @@ import { GameManager } from '../controller/GameManager';
 import { EventBus } from '../core/EventBus';
 import { GameEvents } from '../core/GameEvents';
 import { GameState } from '../model/GameState';
+import { RateLimiter } from '../utils/RateLimiter';
 const { ccclass, property } = _decorator;
 
 /** Turns game events and model flags into music and sound effects. */
@@ -28,38 +29,29 @@ export class AudioPlayer extends Component {
     @property(GameManager)
     private gameManager: GameManager = null!;
 
-    @property(AudioSource)
-    private musicSource: AudioSource = null!;
+    // Sources: one loops the music, the other plays every one-shot effect.
+    @property(AudioSource) private musicSource: AudioSource = null!;
+    @property(AudioSource) private sfxSource: AudioSource = null!;
 
-    @property(AudioSource)
-    private sfxSource: AudioSource = null!;
+    // Clips (assets/audio), one per sound.
+    @property(AudioClip) private bgmClip: AudioClip = null!;
+    @property(AudioClip) private playerHitClip: AudioClip = null!;
+    @property(AudioClip) private bossHitClip: AudioClip = null!;
+    @property(AudioClip) private bossDashClip: AudioClip = null!;
+    @property(AudioClip) private phaseChangeClip: AudioClip = null!;
+    @property(AudioClip) private victoryClip: AudioClip = null!;
+    @property(AudioClip) private defeatClip: AudioClip = null!;
+    @property(AudioClip) private playerDashClip: AudioClip = null!;
+    @property(AudioClip) private playerShotClip: AudioClip = null!;
+    @property(AudioClip) private bossVolleyClip: AudioClip = null!;
+    @property(AudioClip) private explosionClip: AudioClip = null!;
+    @property(AudioClip) private pickupClip: AudioClip = null!;
+    @property(AudioClip) private uiClickClip: AudioClip = null!;
+    @property(AudioClip) private shieldBreakClip: AudioClip = null!;
 
-    @property(AudioClip)
-    private bgmClip: AudioClip = null!;
-
-    @property(AudioClip)
-    private playerHitClip: AudioClip = null!;
-
-    @property(AudioClip)
-    private bossHitClip: AudioClip = null!;
-
-    @property(AudioClip)
-    private bossDashClip: AudioClip = null!;
-
-    @property(AudioClip)
-    private phaseChangeClip: AudioClip = null!;
-
-    @property(AudioClip)
-    private victoryClip: AudioClip = null!;
-
-    @property(AudioClip)
-    private defeatClip: AudioClip = null!;
-
-    @property(AudioClip)
-    private playerDashClip: AudioClip = null!;
-
-    /** Seconds since the last boss-hit tick, used to throttle it. */
-    private timeSinceBossHit: number = AudioConfig.BOSS_HIT_MIN_INTERVAL;
+    /** Rate limits for the frequent effects (see playThrottled). */
+    private readonly bossHitLimiter = new RateLimiter(AudioConfig.BOSS_HIT_MIN_INTERVAL);
+    private readonly playerShotLimiter = new RateLimiter(AudioConfig.PLAYER_SHOT_MIN_INTERVAL);
     /** Dash flags seen last frame, to play the whoosh only on the rising edge. */
     private wasBossDashing = false;
     private wasPlayerDashing = false;
@@ -86,6 +78,10 @@ export class AudioPlayer extends Component {
         EventBus.on(GameEvents.PLAYER_HIT, this.onPlayerHit, this);
         EventBus.on(GameEvents.BOSS_HIT, this.onBossHit, this);
         EventBus.on(GameEvents.BOSS_PHASE_CHANGED, this.onBossPhaseChanged, this);
+        EventBus.on(GameEvents.PLAYER_SHOT, this.onPlayerShot, this);
+        EventBus.on(GameEvents.BOSS_VOLLEY_FIRED, this.onBossVolleyFired, this);
+        EventBus.on(GameEvents.PICKUP_COLLECTED, this.onPickupCollected, this);
+        EventBus.on(GameEvents.SHIELD_BROKEN, this.onShieldBroken, this);
         input.on(Input.EventType.KEY_DOWN, this.onKeyDown, this);
     }
 
@@ -96,30 +92,28 @@ export class AudioPlayer extends Component {
         EventBus.off(GameEvents.PLAYER_HIT, this.onPlayerHit, this);
         EventBus.off(GameEvents.BOSS_HIT, this.onBossHit, this);
         EventBus.off(GameEvents.BOSS_PHASE_CHANGED, this.onBossPhaseChanged, this);
+        EventBus.off(GameEvents.PLAYER_SHOT, this.onPlayerShot, this);
+        EventBus.off(GameEvents.BOSS_VOLLEY_FIRED, this.onBossVolleyFired, this);
+        EventBus.off(GameEvents.PICKUP_COLLECTED, this.onPickupCollected, this);
+        EventBus.off(GameEvents.SHIELD_BROKEN, this.onShieldBroken, this);
         input.off(Input.EventType.KEY_DOWN, this.onKeyDown, this);
         // CLEANUP: the looping music started in onStateChanged must not outlive this component.
         this.musicSource.stop();
+        // CLEANUP: pairs with scheduleOnce in onGameOver (a pending victory jingle).
+        this.unschedule(this.playVictoryJingle);
     }
 
     protected lateUpdate(dt: number): void {
-        // NOTE: stop counting once the interval has passed, so the value never grows without bound.
-        if (this.timeSinceBossHit < AudioConfig.BOSS_HIT_MIN_INTERVAL) {
-            this.timeSinceBossHit += dt;
-        }
+        this.bossHitLimiter.tick(dt);
+        this.playerShotLimiter.tick(dt);
         const world = this.gameManager.world;
         if (!world || this.gameManager.state !== GameState.Playing) {
             return;
         }
-        const isBossDashing = world.boss.isDashing;
-        if (isBossDashing && !this.wasBossDashing) {
-            this.playSfx(this.bossDashClip, AudioConfig.BOSS_DASH_SCALE);
-        }
-        this.wasBossDashing = isBossDashing;
-        const isPlayerDashing = world.player.isDashing;
-        if (isPlayerDashing && !this.wasPlayerDashing) {
-            this.playSfx(this.playerDashClip, AudioConfig.PLAYER_DASH_SCALE);
-        }
-        this.wasPlayerDashing = isPlayerDashing;
+        this.wasBossDashing = this.playOnRisingEdge(world.boss.isDashing, this.wasBossDashing,
+            this.bossDashClip, AudioConfig.BOSS_DASH_SCALE);
+        this.wasPlayerDashing = this.playOnRisingEdge(world.player.isDashing, this.wasPlayerDashing,
+            this.playerDashClip, AudioConfig.PLAYER_DASH_SCALE);
     }
 
     // ---- Private ----
@@ -127,7 +121,9 @@ export class AudioPlayer extends Component {
     private hasAllReferences(): boolean {
         return Boolean(this.gameManager && this.musicSource && this.sfxSource && this.bgmClip
             && this.playerHitClip && this.bossHitClip && this.bossDashClip && this.phaseChangeClip
-            && this.victoryClip && this.defeatClip && this.playerDashClip);
+            && this.victoryClip && this.defeatClip && this.playerDashClip && this.playerShotClip
+            && this.bossVolleyClip && this.explosionClip && this.pickupClip && this.uiClickClip
+            && this.shieldBreakClip);
     }
 
     private onStateChanged(state: GameState): void {
@@ -135,10 +131,20 @@ export class AudioPlayer extends Component {
             // A new round: no edge or throttle state carries over from the previous one.
             this.wasBossDashing = false;
             this.wasPlayerDashing = false;
-            this.timeSinceBossHit = AudioConfig.BOSS_HIT_MIN_INTERVAL;
+            this.bossHitLimiter.reset();
+            this.playerShotLimiter.reset();
+            // CLEANUP: a victory jingle still pending from the last round must not play over the new one.
+            this.unschedule(this.playVictoryJingle);
             return;
         }
-        if (state === GameState.Playing && !this.musicSource.playing) {
+        if (state !== GameState.Playing) {
+            return;
+        }
+        // NOTE: Playing is only entered from the start screen or the Restart button, so this is their
+        // click. It bypasses playSfx(): music play() is asynchronous, so `playing` may still be false
+        // here, and this single one-shot runs inside the user gesture that unlocks audio anyway.
+        this.sfxSource.playOneShot(this.uiClickClip, AudioConfig.UI_CLICK_SCALE);
+        if (!this.musicSource.playing) {
             this.musicSource.play();
         }
     }
@@ -150,8 +156,17 @@ export class AudioPlayer extends Component {
         if (!isAudioUnlocked) {
             return;
         }
-        const clip = isVictory ? this.victoryClip : this.defeatClip;
-        this.sfxSource.playOneShot(clip, AudioConfig.RESULT_SCALE);
+        if (!isVictory) {
+            this.sfxSource.playOneShot(this.defeatClip, AudioConfig.RESULT_SCALE);
+            return;
+        }
+        // The boss explodes first; the jingle follows once the boom has peaked, so they do not mask each other.
+        this.sfxSource.playOneShot(this.explosionClip, AudioConfig.EXPLOSION_SCALE);
+        this.scheduleOnce(this.playVictoryJingle, AudioConfig.VICTORY_JINGLE_DELAY);
+    }
+
+    private playVictoryJingle(): void {
+        this.sfxSource.playOneShot(this.victoryClip, AudioConfig.RESULT_SCALE);
     }
 
     private onPlayerHit(): void {
@@ -159,13 +174,23 @@ export class AudioPlayer extends Component {
     }
 
     private onBossHit(): void {
-        // PERF: the weapon can hit many times per second; one tick per interval avoids stacking
-        // dozens of overlapping one-shots (each one is a new audio node on web).
-        if (this.timeSinceBossHit < AudioConfig.BOSS_HIT_MIN_INTERVAL) {
-            return;
-        }
-        this.timeSinceBossHit = 0;
-        this.playSfx(this.bossHitClip, AudioConfig.BOSS_HIT_SCALE);
+        this.playThrottled(this.bossHitClip, AudioConfig.BOSS_HIT_SCALE, this.bossHitLimiter);
+    }
+
+    private onPlayerShot(): void {
+        this.playThrottled(this.playerShotClip, AudioConfig.PLAYER_SHOT_SCALE, this.playerShotLimiter);
+    }
+
+    private onBossVolleyFired(): void {
+        this.playSfx(this.bossVolleyClip, AudioConfig.BOSS_VOLLEY_SCALE);
+    }
+
+    private onPickupCollected(): void {
+        this.playSfx(this.pickupClip, AudioConfig.PICKUP_SCALE);
+    }
+
+    private onShieldBroken(): void {
+        this.playSfx(this.shieldBreakClip, AudioConfig.SHIELD_BREAK_SCALE);
     }
 
     private onBossPhaseChanged(): void {
@@ -186,7 +211,7 @@ export class AudioPlayer extends Component {
         // CLEANUP: one unlock is enough; pairs with input.on in onEnable (also removed in onDisable).
         input.off(Input.EventType.KEY_DOWN, this.onKeyDown, this);
         if (!this.musicSource.playing) {
-            this.sfxSource.playOneShot(this.playerDashClip, 0);
+            this.sfxSource.playOneShot(this.uiClickClip, 0);
         }
     }
 
@@ -200,5 +225,26 @@ export class AudioPlayer extends Component {
             return;
         }
         this.sfxSource.playOneShot(clip, scale);
+    }
+
+    /**
+     * PERF: the weapon fires and hits several times per second; one sound per limiter interval avoids
+     * stacking dozens of overlapping one-shots (each one is a new audio node on web).
+     */
+    private playThrottled(clip: AudioClip, scale: number, limiter: RateLimiter): void {
+        if (limiter.tryConsume()) {
+            this.playSfx(clip, scale);
+        }
+    }
+
+    /**
+     * Plays the clip only on the frame a flag turns on (a dash starts), not while it stays on.
+     * @returns The flag, to store as "seen last frame".
+     */
+    private playOnRisingEdge(isOn: boolean, wasOn: boolean, clip: AudioClip, scale: number): boolean {
+        if (isOn && !wasOn) {
+            this.playSfx(clip, scale);
+        }
+        return isOn;
     }
 }

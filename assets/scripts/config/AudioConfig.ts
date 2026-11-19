@@ -15,6 +15,18 @@ export const AudioConfig = {
     PHASE_CHANGE_SCALE: 0.9,
     RESULT_SCALE: 1,
     PLAYER_DASH_SCALE: 0.6,
+    /** The auto shot fires every GameConfig.PLAYER.FIRE_INTERVAL, so its tick stays quiet under the music. */
+    PLAYER_SHOT_SCALE: 0.25,
+    BOSS_VOLLEY_SCALE: 0.6,
+    EXPLOSION_SCALE: 1,
+    PICKUP_SCALE: 0.9,
+    UI_CLICK_SCALE: 0.7,
+    /** Glassy crack when the shield absorbs a hit; loud enough to read as "you were saved". */
+    SHIELD_BREAK_SCALE: 0.9,
     /** Shortest time between two boss-hit ticks; the player weapon hits many times per second. */
     BOSS_HIT_MIN_INTERVAL: 0.08,
+    /** Shortest time between two shot ticks: a safety cap just below GameConfig.PLAYER.FIRE_INTERVAL. */
+    PLAYER_SHOT_MIN_INTERVAL: 0.1,
+    /** Seconds between the victory explosion and the victory jingle. */
+    VICTORY_JINGLE_DELAY: 0.45,
 } as const;
