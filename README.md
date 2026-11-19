@@ -6,6 +6,8 @@ inside a large rectangular arena closed by four walls.
 
 ## How to run
 
+- **Play in the browser (no install)**: https://claude.ai/artifact/CrUxMfXZBLN7ULPG5nTkXq — tap or press a key to
+  start; sound starts after the first tap.
 - **Editor**: open the folder with Cocos Creator **3.7.4** (Dashboard → Projects → Add), open
   `assets/scenes/Main.scene`, press Preview.
 - **Web build**: `build/web-mobile/` (not committed; produce it with Project → Build → Web Mobile, or
