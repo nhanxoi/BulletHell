@@ -2,21 +2,23 @@
  * GameManager.ts
  * Entry point of a play session: owns the simulation (BattleWorld) and the player input
  * (InputState), runs the only gameplay update of the game and drives the state machine.
- * Changes are broadcast through EventBus so HUD, popups and camera never poll the model.
+ * Changes are broadcast through EventBus by BattleBroadcaster, so HUD, popups, effects and audio never poll the model.
+ * Also times the round and keeps the best clear time (persisted through SaveStore).
  *
  * Attach to node GameRoot in Main.scene. Views read `world` in lateUpdate; input components
  * write `input` when input events arrive.
  */
 import { _decorator, Component } from 'cc';
 import { GameConfig } from '../config/GameConfig';
-import { BossPhase } from '../config/BossPhase';
 import { EventBus } from '../core/EventBus';
 import { GameEvents } from '../core/GameEvents';
+import { SaveStore } from '../core/SaveStore';
+import { BattleBroadcaster } from './BattleBroadcaster';
 import { BattleOutcome } from '../model/BattleOutcome';
 import { BattleWorld } from '../model/BattleWorld';
 import { GameState } from '../model/GameState';
-import { Health } from '../model/Health';
 import { InputState } from '../model/InputState';
+import { RoundTimer } from '../model/RoundTimer';
 const { ccclass } = _decorator;
 
 /** Owns the battle simulation and the session state machine; the only writer of GameState. */
@@ -26,11 +28,11 @@ export class GameManager extends Component {
     // NOTE: a plain data object with no side effects, so it is safe to create it with the component;
     // input components can then write to it without a null check.
     private readonly _input = new InputState();
+    /** Plain data like _input: round clock and best clear time. */
+    private readonly roundTimer = new RoundTimer();
+    /** Turns world changes into EventBus events, once per frame. */
+    private readonly broadcaster = new BattleBroadcaster();
     private _state = GameState.Ready;
-    /** Last values broadcast to the HUD, so events are only emitted when something changed. */
-    private lastPlayerHp = 0;
-    private lastBossHp = 0;
-    private lastBossPhase = BossPhase.High;
 
     // ---- Lifecycle ----
 
@@ -38,6 +40,8 @@ export class GameManager extends Component {
         // NOTE: created here, not in a field initializer, because the editor also constructs
         // components when it opens the scene and does not need a running simulation.
         this._world = new BattleWorld();
+        // NOTE: read once per session; SaveStore never throws and returns 0 (no record) on any failure.
+        this.roundTimer.setBestClearTime(SaveStore.load().bestClearTime);
     }
 
     protected start(): void {
@@ -57,7 +61,7 @@ export class GameManager extends Component {
         }
         const outcome = this.simulateFrame(dt, this._world);
         // NOTE: HP is broadcast before the outcome, so the HUD already shows 0 when GAME_OVER arrives.
-        this.emitChanges(this._world);
+        this.broadcaster.emitFrameChanges(this._world);
         this.handleOutcome(outcome, this._world);
     }
 
@@ -79,6 +83,21 @@ export class GameManager extends Component {
     /** Current state, read-only for other classes. */
     get state(): GameState {
         return this._state;
+    }
+
+    /** Seconds of simulated Playing time in the current round (frozen on the result screen). */
+    get roundTime(): number {
+        return this.roundTimer.roundTime;
+    }
+
+    /** Shortest victory time ever, seconds; 0 when the boss was never defeated. */
+    get bestClearTime(): number {
+        return this.roundTimer.bestClearTime;
+    }
+
+    /** True only when the last round was a victory that beat the previous record. */
+    get isNewBestTime(): boolean {
+        return this.roundTimer.isNewBestTime;
     }
 
     /** Starts a new round without reloading the scene. Used by the start screen and the Restart button. */
@@ -113,8 +132,9 @@ export class GameManager extends Component {
         }
         this.setState(GameState.Ready);
         this._world.reset();
+        this.roundTimer.startRound();
         this._input.isDashRequested = false;
-        this.emitInitialValues(this._world);
+        this.broadcaster.emitRoundStart(this._world);
     }
 
     /**
@@ -129,50 +149,12 @@ export class GameManager extends Component {
         while (remaining > 0 && outcome === BattleOutcome.None) {
             const step = Math.min(remaining, GameConfig.FRAME.MAX_DT);
             outcome = world.step(step, this._input);
+            // NOTE: simulated time, not wall time: a cut long frame is not counted, so the clear time
+            // matches what was actually played.
+            this.roundTimer.advance(step);
             remaining -= step;
         }
         return outcome;
-    }
-
-    /** Broadcasts the start values so the HUD never shows numbers from the previous round. */
-    private emitInitialValues(world: BattleWorld): void {
-        const playerHealth = world.player.health;
-        const bossHealth = world.boss.health;
-        this.lastPlayerHp = playerHealth.current;
-        this.lastBossHp = bossHealth.current;
-        this.lastBossPhase = world.boss.phase;
-        EventBus.emit(GameEvents.PLAYER_HP_CHANGED, playerHealth.current, playerHealth.max);
-        EventBus.emit(GameEvents.BOSS_HP_CHANGED, bossHealth.current, bossHealth.max);
-        EventBus.emit(GameEvents.BOSS_PHASE_CHANGED, this.lastBossPhase);
-    }
-
-    /** Emits HP / phase / hit events for what changed during this frame. */
-    private emitChanges(world: BattleWorld): void {
-        // PERF: compare with the last broadcast value, so the HUD is not updated every frame.
-        this.lastPlayerHp = this.emitHealthChange(
-            world.player.health, this.lastPlayerHp, GameEvents.PLAYER_HP_CHANGED, GameEvents.PLAYER_HIT);
-        this.lastBossHp = this.emitHealthChange(
-            world.boss.health, this.lastBossHp, GameEvents.BOSS_HP_CHANGED, GameEvents.BOSS_HIT);
-        if (world.boss.phase !== this.lastBossPhase) {
-            this.lastBossPhase = world.boss.phase;
-            EventBus.emit(GameEvents.BOSS_PHASE_CHANGED, this.lastBossPhase);
-        }
-    }
-
-    /**
-     * Emits the HP event (and the hit event when HP dropped) if the value changed.
-     * @returns The HP value to remember as "last broadcast".
-     */
-    private emitHealthChange(health: Health, lastHp: number, hpEvent: string, hitEvent: string): number {
-        const hp = health.current;
-        if (hp === lastHp) {
-            return lastHp;
-        }
-        if (hp < lastHp) {
-            EventBus.emit(hitEvent);
-        }
-        EventBus.emit(hpEvent, hp, health.max);
-        return hp;
     }
 
     private handleOutcome(outcome: BattleOutcome, world: BattleWorld): void {
@@ -180,6 +162,7 @@ export class GameManager extends Component {
             case BattleOutcome.BossDefeated:
                 // Requirement: when the boss dies every bullet on the map disappears instantly.
                 world.clearAllBullets();
+                this.saveIfBestTime();
                 this.endGame(true);
                 break;
             case BattleOutcome.PlayerDefeated:
@@ -187,6 +170,16 @@ export class GameManager extends Component {
                 break;
             default:
                 break;
+        }
+    }
+
+    /**
+     * Records the victory time and persists it when it beats the record.
+     * NOTE: called before GAME_OVER is emitted, so the result panel already reads the new values.
+     */
+    private saveIfBestTime(): void {
+        if (this.roundTimer.recordVictory()) {
+            SaveStore.save({ bestClearTime: this.roundTimer.bestClearTime });
         }
     }
 
