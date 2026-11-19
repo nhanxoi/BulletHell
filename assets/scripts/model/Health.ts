@@ -1,7 +1,9 @@
 /**
  * Health.ts
- * Hit points of one combatant (player or boss). Damage is clamped so HP never goes below 0,
- * and bad input (negative, NaN) is ignored instead of breaking the fight.
+ * Hit points of one combatant (player or boss). Damage is clamped so HP stays in [0, max], and bad
+ * input (negative, NaN) is ignored instead of breaking the fight.
+ * NOTE: during a round HP only goes down (the brief asks for a fixed health value, so nothing heals);
+ * only reset() refills it for the next round.
  */
 
 /** Current and maximum HP with damage and reset. */

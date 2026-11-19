@@ -39,14 +39,18 @@ export class FanShot implements IBossShot {
         this.cooldown = this.config.INTERVAL;
     }
 
-    /** Fires a volley when the cooldown runs out. */
-    step(dt: number, origin: Point, target: Point, emitter: IBulletEmitter): void {
+    /**
+     * Fires a volley when the cooldown runs out.
+     * @returns true when a volley was fired.
+     */
+    step(dt: number, origin: Point, target: Point, emitter: IBulletEmitter): boolean {
         this.cooldown -= dt;
         if (this.cooldown > 0) {
-            return;
+            return false;
         }
         this.cooldown = this.config.INTERVAL;
         this.fireVolley(origin, target, emitter);
+        return true;
     }
 
     // ---- Private ----

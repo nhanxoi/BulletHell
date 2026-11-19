@@ -2,7 +2,8 @@
  * DashMove.ts
  * Boss dash move, a loop of three stages: Windup (stand still and flash) -> Dash (charge fast in a
  * locked direction) -> Recover (stand still) -> Windup again. Only Recover may be interrupted,
- * so BossBrain never cuts a telegraphed or running dash.
+ * so BossBrain never cuts a telegraphed or running dash. The locked direction is stored on
+ * BossModel (dashDirX / dashDirY), the single copy used both for the charge and by the telegraph view.
  */
 import { DashMoveConfig } from '../../config/BossConfigTypes';
 import { ArenaBounds } from '../ArenaBounds';
@@ -23,9 +24,6 @@ export class DashMove implements IBossMove {
     private stage = DashStage.Windup;
     /** Seconds left in the current stage. */
     private stageTimer = 0;
-    /** Unit vector of the dash, locked when the windup starts. */
-    private directionX = 0;
-    private directionY = 0;
 
     /** @param config Windup, speed, duration and recover times (BossConfig.DASH). */
     constructor(config: DashMoveConfig) {
@@ -62,10 +60,9 @@ export class DashMove implements IBossMove {
         }
     }
 
-    /** Clears the VFX flags so the boss does not keep flashing after the move is replaced. */
+    /** Clears the VFX flags and the direction so the boss does not keep flashing after the move is replaced. */
     exit(boss: BossModel): void {
-        boss.isWindingUp = false;
-        boss.isDashing = false;
+        boss.clearActionFlags();
     }
 
     // ---- Private ----
@@ -90,8 +87,8 @@ export class DashMove implements IBossMove {
             return;
         }
         const scale = 1 / Math.sqrt(distanceSqr);
-        this.directionX = dx * scale;
-        this.directionY = dy * scale;
+        boss.dashDirX = dx * scale;
+        boss.dashDirY = dy * scale;
         this.stage = DashStage.Windup;
         this.stageTimer = this.config.WINDUP;
         boss.isWindingUp = true;
@@ -108,16 +105,15 @@ export class DashMove implements IBossMove {
     private startRecover(boss: BossModel): void {
         this.stage = DashStage.Recover;
         this.stageTimer = this.config.RECOVER;
-        // Both flags: Recover is also entered straight from a skipped windup.
-        boss.isWindingUp = false;
-        boss.isDashing = false;
+        // Both flags and the direction: Recover is also entered straight from a skipped windup.
+        boss.clearActionFlags();
     }
 
     /** Moves along the locked direction; ends the dash on timeout or when a wall stops the boss. */
     private stepDash(dt: number, boss: BossModel, bounds: ArenaBounds): void {
         const distance = this.config.SPEED * dt;
-        const nextX = boss.x + this.directionX * distance;
-        const nextY = boss.y + this.directionY * distance;
+        const nextX = boss.x + boss.dashDirX * distance;
+        const nextY = boss.y + boss.dashDirY * distance;
         boss.x = bounds.clampX(nextX, boss.halfSize);
         boss.y = bounds.clampY(nextY, boss.halfSize);
         // NOTE: clamping changed the position = the boss hit a wall. Comparing with the unclamped

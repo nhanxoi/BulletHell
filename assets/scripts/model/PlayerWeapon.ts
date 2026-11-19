@@ -26,22 +26,24 @@ export class PlayerWeapon {
      * @param shooter Where the bullet starts (the player centre).
      * @param target  What to aim at (the boss centre).
      * @param emitter Where the bullet is created (the player bullet store).
+     * @returns true when a bullet was fired during this step (BattleWorld counts shots for audio).
      */
-    step(dt: number, shooter: Point, target: Point, emitter: IBulletEmitter): void {
+    step(dt: number, shooter: Point, target: Point, emitter: IBulletEmitter): boolean {
         this.cooldown = Math.max(0, this.cooldown - dt);
         if (this.cooldown > 0) {
-            return;
+            return false;
         }
         const dx = target.x - shooter.x;
         const dy = target.y - shooter.y;
         const distanceSqr = dx * dx + dy * dy;
         // NOTE: distance 0 has no direction; skip the shot instead of dividing by zero.
         if (distanceSqr > AUTO_AIM_RANGE_SQR || distanceSqr === 0) {
-            return;
+            return false;
         }
         // PERF: one sqrt per shot (a few per second), not per frame.
         const scale = PLAYER.BULLET_SPEED / Math.sqrt(distanceSqr);
         emitter.spawn(shooter.x, shooter.y, dx * scale, dy * scale);
         this.cooldown = PLAYER.FIRE_INTERVAL;
+        return true;
     }
 }

@@ -75,6 +75,16 @@ export const GameConfig = {
         ACTION_SWITCH_MIN: 2.0,
         ACTION_SWITCH_MAX: 4.0,
     },
+    PICKUP: {
+        /** Shield orb radius, px. Touching it gives the player one shield charge (absorbs one hit). */
+        RADIUS: 18,
+        /** The orb appears at least this far from the boss centre, px, so collecting it is a risk choice. */
+        MIN_DISTANCE_FROM_BOSS: 500,
+        /** Extra space kept between the orb and the walls, px (on top of its radius). */
+        WALL_GAP: 40,
+        /** Random positions tried before falling back to the arena corner farthest from the boss. */
+        SPAWN_ATTEMPTS: 8,
+    },
     BULLETS: {
         /** Fixed capacity of each bullet store; a spawn beyond it is skipped (and warned once). */
         PLAYER_CAPACITY: 64,
@@ -115,5 +125,9 @@ export const GameConfig = {
         /** Boss tint for a moment after a hit, and during a dash. */
         BOSS_HIT: '#FCA5A5',
         BOSS_DASH: '#A855F7',
+        /** Shield orb. */
+        PICKUP: '#22D3EE',
+        /** Ring around the player while a shield charge is held. */
+        PLAYER_SHIELD: '#67E8F9',
     },
 } as const;

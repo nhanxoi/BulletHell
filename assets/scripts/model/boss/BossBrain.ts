@@ -52,17 +52,19 @@ export class BossBrain {
      * Updates the phase and the action choice, then steps the active move and shot.
      * @param target  The player (chased and aimed at).
      * @param emitter The boss bullet store.
+     * @returns true when the active shot fired a volley during this step.
      */
-    step(dt: number, boss: BossModel, target: Point, bounds: ArenaBounds, emitter: IBulletEmitter): void {
+    step(dt: number, boss: BossModel, target: Point, bounds: ArenaBounds, emitter: IBulletEmitter): boolean {
         this.updatePhase(boss);
         this.updateMoveChoice(dt, boss, target, bounds);
         this.updateShotChoice(dt);
         if (this.move !== null) {
             this.move.step(dt, boss, target, bounds);
         }
-        if (this.shot !== null) {
-            this.shot.step(dt, boss, target, emitter);
+        if (this.shot === null) {
+            return false;
         }
+        return this.shot.step(dt, boss, target, emitter);
     }
 
     // ---- Private ----

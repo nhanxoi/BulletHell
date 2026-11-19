@@ -17,6 +17,7 @@ export interface IBossShot {
      * @param origin  Where bullets start (the boss centre).
      * @param target  What the volley aims at (the player).
      * @param emitter Where bullets are created (the boss bullet store).
+     * @returns true when a volley was fired during this step (BattleWorld counts volleys for audio).
      */
-    step(dt: number, origin: Point, target: Point, emitter: IBulletEmitter): void;
+    step(dt: number, origin: Point, target: Point, emitter: IBulletEmitter): boolean;
 }

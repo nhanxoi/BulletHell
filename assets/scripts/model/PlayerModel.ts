@@ -1,7 +1,7 @@
 /**
  * PlayerModel.ts
- * Player simulation state: position, HP, the invulnerability timer after a hit and the dash
- * (a short burst of speed with its own invulnerability and cooldown).
+ * Player simulation state: position, HP, the shield charge from the shield orb, the invulnerability
+ * timer after a hit and the dash (a short burst of speed with its own invulnerability and cooldown).
  * BattleWorld steps it once per frame; PlayerView, CameraFollow and DashButton only read it.
  */
 import { GameConfig } from '../config/GameConfig';
@@ -19,6 +19,7 @@ export class PlayerModel implements Point {
 
     private _x: number = PLAYER.START_X;
     private _y: number = PLAYER.START_Y;
+    private _hasShield = false;
     /** Seconds of invulnerability left after a hit; 0 means no hit invulnerability. */
     private hitInvulnerableTimer = 0;
     /** Seconds of dash left; 0 means the player is not dashing. */
@@ -60,15 +61,21 @@ export class PlayerModel implements Point {
         return this.dashTimer > 0;
     }
 
+    /** True while the player holds a shield charge (the next hit costs no HP). */
+    get hasShield(): boolean {
+        return this._hasShield;
+    }
+
     /** Dash cooldown left as a ratio: 0 = ready, 1 = just used. */
     get dashCooldownRatio(): number {
         return this.dashCooldownTimer / PLAYER.DASH_COOLDOWN;
     }
 
-    /** Back to the start position with full HP, no invulnerability and the dash ready. */
+    /** Back to the start position with full HP, no shield, no invulnerability and the dash ready. */
     reset(): void {
         this._x = PLAYER.START_X;
         this._y = PLAYER.START_Y;
+        this._hasShield = false;
         this.clearTimedEffects();
         this.dashCooldownTimer = 0;
         this.lastMoveX = 0;
@@ -102,9 +109,28 @@ export class PlayerModel implements Point {
         this.move(dt, moveX, moveY, bounds);
     }
 
-    /** Applies damage unless the player is invulnerable, then starts the hit invulnerability window. */
+    /**
+     * Gives the player one shield charge. NOTE: a charge does not stack: collecting a second orb
+     * while shielded still leaves exactly one.
+     */
+    grantShield(): void {
+        this._hasShield = true;
+    }
+
+    /**
+     * Resolves one hit: nothing while invulnerable; otherwise the shield absorbs it if held, else
+     * HP is lost. Either way the hit invulnerability window starts.
+     * NOTE: a shielded hit also starts the window, so the other bullets overlapping the player in the
+     * same frame (or the boss body touching it) do not land right after the shield breaks.
+     */
     takeHit(damage: number): void {
-        if (this.isInvulnerable) {
+        // NOTE: `!(damage > 0)` also rejects NaN, so a bad value never breaks the shield for free.
+        if (this.isInvulnerable || !(damage > 0)) {
+            return;
+        }
+        if (this._hasShield) {
+            this._hasShield = false;
+            this.hitInvulnerableTimer = PLAYER.HIT_INVULNERABLE;
             return;
         }
         if (this.health.applyDamage(damage) > 0) {
