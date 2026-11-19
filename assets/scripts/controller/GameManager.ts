@@ -3,12 +3,13 @@
  * Entry point of a play session: owns the simulation (BattleWorld) and the player input
  * (InputState), runs the only gameplay update of the game and drives the state machine.
  * Changes are broadcast through EventBus by BattleBroadcaster, so HUD, popups, effects and audio never poll the model.
- * Also times the round and keeps the best clear time (persisted through SaveStore).
+ * Also times the round, keeps the best clear time (persisted through SaveStore) and is the only
+ * place that pauses and resumes the engine (director), so the state machine and the director agree.
  *
  * Attach to node GameRoot in Main.scene. Views read `world` in lateUpdate; input components
  * write `input` when input events arrive.
  */
-import { _decorator, Component } from 'cc';
+import { _decorator, Component, director } from 'cc';
 import { GameConfig } from '../config/GameConfig';
 import { EventBus } from '../core/EventBus';
 import { GameEvents } from '../core/GameEvents';
@@ -53,6 +54,12 @@ export class GameManager extends Component {
         if (this._state === GameState.Ready) {
             this.prepareRound();
         }
+    }
+
+    protected onDestroy(): void {
+        // CLEANUP: pairs with director.pause() in pause(); leaving the scene while paused must not
+        // leave the engine paused for whatever is loaded next.
+        this.resumeDirectorIfPaused();
     }
 
     protected update(dt: number): void {
@@ -100,13 +107,49 @@ export class GameManager extends Component {
         return this.roundTimer.isNewBestTime;
     }
 
-    /** Starts a new round without reloading the scene. Used by the start screen and the Restart button. */
+    /** Starts a new round without reloading the scene. Used by the start screen and both Restart buttons. */
     startGame(): void {
         if (!this._world) {
             return;
         }
+        this.resumeDirectorIfPaused();
         this.prepareRound();
         this.setState(GameState.Playing);
+    }
+
+    /**
+     * Freezes the round behind the pause menu. Ignored outside Playing.
+     * NOTE: director.pause() stops update, schedules, tweens and widgets, but input, rendering and
+     * audio keep running, so the pause menu stays clickable (it must not open with a tween).
+     */
+    pause(): void {
+        if (this._state !== GameState.Playing) {
+            return;
+        }
+        this.setState(GameState.Paused);
+        director.pause();
+    }
+
+    /** Continues the paused round. Ignored outside Paused. */
+    resume(): void {
+        if (this._state !== GameState.Paused) {
+            return;
+        }
+        // NOTE: the director runs again before Playing is broadcast, so listeners see a live engine.
+        director.resume();
+        this.setState(GameState.Playing);
+    }
+
+    /**
+     * Abandons the paused round and prepares a fresh one that waits in Ready (the start screen shows it).
+     * Ignored outside Paused.
+     */
+    returnToTitle(): void {
+        if (this._state !== GameState.Paused) {
+            return;
+        }
+        this.resumeDirectorIfPaused();
+        this.prepareRound();
     }
 
     /**
@@ -187,6 +230,13 @@ export class GameManager extends Component {
     private endGame(isVictory: boolean): void {
         this.setState(GameState.GameOver);
         EventBus.emit(GameEvents.GAME_OVER, isVictory);
+    }
+
+    /** Restarting or leaving from the pause menu must not keep the engine frozen. */
+    private resumeDirectorIfPaused(): void {
+        if (this._state === GameState.Paused) {
+            director.resume();
+        }
     }
 
     /**

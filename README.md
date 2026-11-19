@@ -21,10 +21,10 @@ inside a large rectangular arena closed by four walls.
 
 ### Controls
 
-| Platform | Move | Dash | Shoot |
-| --- | --- | --- | --- |
-| Desktop | WASD or arrow keys | Space or Shift | automatic when the boss is within range |
-| Touch devices | drag on the left half of the screen (floating joystick) | DASH button (bottom right) | automatic |
+| Platform | Move | Dash | Shoot | Pause |
+| --- | --- | --- | --- | --- |
+| Desktop | WASD or arrow keys | Space or Shift | automatic when the boss is within range | Esc or P, or the II button |
+| Touch devices | drag on the left half of the screen (floating joystick) | DASH button (bottom right) | automatic | II button (top left), Android back key |
 
 ## Constraints of the brief
 
@@ -66,7 +66,8 @@ Required by the brief, all done:
 - Boss behaviour by HP ratio: **High** (>= 60%) Normal move + Normal shot; **Medium** (>= 30%) random Normal/Dash
   move and random Normal/Crazy shot, re-picked independently every 2–4 s; **Low** (< 30%) Dash + Crazy.
 - Boss defeated → every bullet on the map is removed instantly.
-- Game Over screen ("GAME OVER" + who won) with a Restart button when either side dies.
+- Game Over screen with a Restart button when either side dies; its title is "VICTORY" (gold) when the boss is
+  defeated and "GAME OVER" (red) when the player is.
 - All tuning values in `assets/scripts/config/` (no magic numbers in logic).
 
 Optional and bonus items, also done:
@@ -85,6 +86,8 @@ Optional and bonus items, also done:
 - Visual feedback: boss tint darkens per phase, white flash during the dash windup, purple tint while dashing,
   short flash when the boss is hit, the boss disappears when defeated, player blink while invulnerable, camera shake
   when the player is hit, HP bars and a phase label.
+- **Pause menu**: II button, Esc / P or the Android back key; Resume, Restart and Home (back to the start screen).
+  The round also pauses itself when the app goes to the background (phone call, tab switch).
 - Start screen with the controls; the first round waits until the player taps or presses a key (this is also
   the gesture browsers need before playing audio).
 - Smooth follow camera clamped to the arena.
@@ -104,7 +107,7 @@ assets/scripts/
   view/        Components that draw the model (lateUpdate), effects (BurstPool, ImpactEffects,
                DashTelegraphView, PickupView) and AudioPlayer (sound)
   input/       KeyboardInput, VirtualJoystick, DashButton: turn input events into InputState / dash requests
-  ui/          HUD and Game Over panel (event driven)
+  ui/          HUD, Game Over panel, pause menu, start screen (event driven)
   utils/       Collision, MathUtil
 ```
 
@@ -144,7 +147,7 @@ flowchart LR
 - `World` (RenderRoot2D, layer DEFAULT): `GameCamera` (orthographic, follows the player), floor and four walls,
   bullet layers, boss, player.
 - `Canvas` (layer UI_2D, ScreenAdapter) with its own `UICamera` drawn on top: `SafeArea` (HP bars, phase label,
-  controls hint, joystick, DASH button), Game Over popup, start screen.
+  controls hint, joystick, DASH button, pause button), Game Over popup, pause menu, start screen.
 
 ### Screen adaptation
 
@@ -193,7 +196,12 @@ flowchart LR
 - **Contact damage**: touching the boss costs 20 HP; after any hit the player is invulnerable for 1 s and boss
   bullets pass through instead of being consumed.
 - **Same-frame double kill** counts as a victory (boss death is checked first).
-- **No pause state**: not required, and it avoids `director.pause()` side effects.
+- **Pause with `director.pause()`, only through `GameManager`**: one `Paused` state, entered only from Playing.
+  `GameManager.pause()` / `resume()` are the only callers of `director.pause()` / `resume()`, so the state machine and
+  the engine always agree; Restart, Home and `onDestroy` resume the director first. While paused, update, schedules,
+  tweens and widgets stop but input and rendering run, so the pause menu opens without a tween and aligns its widgets
+  by hand (`Widget.updateAlignment`). Trade-off: simpler than skipping every update by hand, but every UI shown
+  during the pause must follow these two rules.
 - **Config as TypeScript `as const` objects** rather than JSON: type-checked (a missing phase/shot entry or an empty
   phase list is a compile error), no async loading or parse-failure path. Trade-off: changing a value needs a rebuild;
   moving `GameConfig` to a `JsonAsset` with a validated loader would allow live tuning.
@@ -210,7 +218,9 @@ flowchart LR
 | `input.on` KEY_DOWN / KEY_UP, `game.on(EVENT_HIDE)` (KeyboardInput) | `input.off` / `game.off`, held keys released | `onEnable` ↔ `onDisable` |
 | `node.on` touch events (VirtualJoystick), Restart button click (GameOverPanel) | `node.off` | `onEnable` ↔ `onDisable` |
 | `view.on('canvas-resize')` (CameraFollow, ScreenAdapter) | `view.off` | `onEnable` ↔ `onDisable` |
-| `node.on(TOUCH_END)`, `input.on(KEY_UP)` (StartScreen) | `off` (the node hides itself after the first start) | `onEnable` ↔ `onDisable` |
+| `node.on(TOUCH_END)`, `input.on(KEY_UP)` (StartScreen) | `off` (the node hides itself when the round starts) | `onEnable` ↔ `onDisable` |
+| Four button clicks, `EventBus.on`, `input.on(KEY_DOWN)`, `game.on(EVENT_HIDE)`, `view.on('canvas-resize')` (PausePanel) | matching `off`; cached widget array cleared | `onEnable` ↔ `onDisable`, `onDestroy` |
+| `director.pause()` (GameManager.pause) | `director.resume()` in resume / startGame / returnToTitle / `onDestroy` | GameManager |
 | `node.on(TOUCH_START)` (DashButton) | `node.off` | `onEnable` ↔ `onDisable` |
 | Music `AudioSource.play()` (loop), `EventBus.on` / `input.on` (AudioPlayer) | `stop()`, `off` | `onEnable` ↔ `onDisable` |
 | Victory jingle `scheduleOnce` (AudioPlayer) | `unschedule` on Ready and in `onDisable` | — |

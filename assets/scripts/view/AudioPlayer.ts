@@ -135,15 +135,23 @@ export class AudioPlayer extends Component {
             this.playerShotLimiter.reset();
             // CLEANUP: a victory jingle still pending from the last round must not play over the new one.
             this.unschedule(this.playVictoryJingle);
+            // A round left from the pause menu still has paused music; the next round starts it from the top.
+            this.musicSource.stop();
+            return;
+        }
+        if (state === GameState.Paused) {
+            this.playSfx(this.uiClickClip, AudioConfig.UI_CLICK_SCALE);
+            this.musicSource.pause();
             return;
         }
         if (state !== GameState.Playing) {
             return;
         }
-        // NOTE: Playing is only entered from the start screen or the Restart button, so this is their
-        // click. It bypasses playSfx(): music play() is asynchronous, so `playing` may still be false
+        // NOTE: Playing is only entered from a button or key (start screen, Restart, Resume), so this is
+        // its click. It bypasses playSfx(): music play() is asynchronous, so `playing` may still be false
         // here, and this single one-shot runs inside the user gesture that unlocks audio anyway.
         this.sfxSource.playOneShot(this.uiClickClip, AudioConfig.UI_CLICK_SCALE);
+        // NOTE: after Resume, play() continues the paused music where it stopped.
         if (!this.musicSource.playing) {
             this.musicSource.play();
         }

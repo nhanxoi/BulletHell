@@ -5,7 +5,8 @@
  * The tap or key press is also the user gesture browsers need before they allow audio.
  *
  * Attach to node StartScreen (full-screen, with BlockInputEvents so the tap does not reach the
- * joystick under it). The node hides itself after the first start; Restart uses the Game Over panel.
+ * joystick under it). The node hides itself when the round starts; Home in the pause menu shows it
+ * again (show()) after GameManager has prepared a fresh round in Ready.
  */
 import { _decorator, Component, EventKeyboard, input, Input, KeyCode, Node } from 'cc';
 import { GameManager } from '../controller/GameManager';
@@ -20,7 +21,7 @@ const IGNORED_START_KEYS: ReadonlySet<KeyCode> = new Set([
     KeyCode.ESCAPE, KeyCode.TAB, KeyCode.ALT_LEFT, KeyCode.ALT_RIGHT, KeyCode.CTRL_LEFT, KeyCode.CTRL_RIGHT,
 ]);
 
-/** Starts the first round on the first tap or key press, then hides itself. */
+/** Starts the round on the first tap or key press, then hides itself. */
 @ccclass('StartScreen')
 export class StartScreen extends Component {
     @property(GameManager)
@@ -48,6 +49,13 @@ export class StartScreen extends Component {
         // CLEANUP: pairs with the two on() calls in onEnable; same event, handler and target.
         this.node.off(Node.EventType.TOUCH_END, this.onStartRequested, this);
         input.off(Input.EventType.KEY_UP, this.onKeyUp, this);
+    }
+
+    // ---- Public API ----
+
+    /** Shows the screen again; it waits for a tap or key like at launch. Activating runs onEnable. */
+    show(): void {
+        this.node.active = true;
     }
 
     // ---- Private ----
