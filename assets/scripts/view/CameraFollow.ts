@@ -1,7 +1,9 @@
 /**
  * CameraFollow.ts
  * Top-down camera: smoothly follows the player, never shows anything outside the outer walls,
- * snaps to the player when a round starts and shakes briefly when the player is hit.
+ * snaps to the player when a round starts and shakes briefly when the player is hit. Its zoom
+ * adapts to the screen shape so at least CAMERA.MIN_VIEW_WIDTH x MIN_VIEW_HEIGHT world px are
+ * visible on any phone, tablet or window.
  * It reads the player position from the model (not from the Player node), so it does not depend
  * on the order in which views run lateUpdate.
  *
@@ -9,15 +11,13 @@
  */
 import { _decorator, Camera, Component, view } from 'cc';
 import { GameConfig } from '../config/GameConfig';
+import { ViewEvents } from '../core/ViewEvents';
 import { EventBus } from '../core/EventBus';
 import { GameEvents } from '../core/GameEvents';
 import { GameManager } from '../controller/GameManager';
 import { GameState } from '../model/GameState';
 import { clamp } from '../utils/MathUtil';
 const { ccclass, property } = _decorator;
-
-/** View event emitted by the engine after the game canvas is resized (window, rotation). */
-const CANVAS_RESIZE_EVENT = 'canvas-resize';
 
 /** Eases the camera toward the player, clamped to the arena, with a time-based hit shake. */
 @ccclass('CameraFollow')
@@ -49,20 +49,20 @@ export class CameraFollow extends Component {
             return;
         }
         this.cameraZ = this.node.position.z;
-        this.updateLimits();
+        this.fitViewToScreen();
     }
 
     protected onEnable(): void {
         EventBus.on(GameEvents.STATE_CHANGED, this.onStateChanged, this);
         EventBus.on(GameEvents.PLAYER_HIT, this.onPlayerHit, this);
-        view.on(CANVAS_RESIZE_EVENT, this.onCanvasResize, this);
+        view.on(ViewEvents.CANVAS_RESIZE, this.onCanvasResize, this);
     }
 
     protected onDisable(): void {
         // CLEANUP: pairs with the three on() calls in onEnable; same event, handler and target.
         EventBus.off(GameEvents.STATE_CHANGED, this.onStateChanged, this);
         EventBus.off(GameEvents.PLAYER_HIT, this.onPlayerHit, this);
-        view.off(CANVAS_RESIZE_EVENT, this.onCanvasResize, this);
+        view.off(ViewEvents.CANVAS_RESIZE, this.onCanvasResize, this);
         this.shakeTimeLeft = 0;
     }
 
@@ -102,13 +102,19 @@ export class CameraFollow extends Component {
         this.node.setPosition(this.followX + offsetX, this.followY + offsetY, this.cameraZ);
     }
 
-    /** Recomputes how far the camera may move, from the visible area and the outer wall rect. */
-    private updateLimits(): void {
+    /**
+     * Sizes the camera for the current screen shape, then recomputes how far it may move inside the
+     * outer wall rect.
+     */
+    private fitViewToScreen(): void {
         // NOTE: getVisibleSize() allocates a Size, which is why it is only called on load and resize.
         const visibleSize = view.getVisibleSize();
         const aspect = visibleSize.height > 0 ? visibleSize.width / visibleSize.height : 1;
-        // An orthographic camera shows orthoHeight above and below its centre.
-        const halfViewHeight = this.camera.orthoHeight;
+        const { MIN_VIEW_WIDTH, MIN_VIEW_HEIGHT } = GameConfig.CAMERA;
+        // An orthographic camera shows orthoHeight above and below its centre. Wide screens keep the
+        // minimum height and see more to the sides; narrow or portrait screens keep the minimum width.
+        const halfViewHeight = Math.max(MIN_VIEW_HEIGHT / 2, MIN_VIEW_WIDTH / 2 / aspect);
+        this.camera.orthoHeight = halfViewHeight;
         const halfViewWidth = halfViewHeight * aspect;
         const { WIDTH, HEIGHT, WALL_THICKNESS } = GameConfig.ARENA;
         // If the view is larger than the arena, the limit is 0 and the camera stays centred.
@@ -117,7 +123,7 @@ export class CameraFollow extends Component {
     }
 
     private onCanvasResize(): void {
-        this.updateLimits();
+        this.fitViewToScreen();
     }
 
     private onStateChanged(state: GameState): void {

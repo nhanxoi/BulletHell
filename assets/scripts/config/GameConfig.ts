@@ -27,6 +27,9 @@ export const GameConfig = {
     CAMERA: {
         /** How fast the camera catches up with the player, 1/s (higher = snappier). */
         FOLLOW_SHARPNESS: 8,
+        /** World area always visible, px: wider screens see more to the sides, narrower ones more above/below. */
+        MIN_VIEW_WIDTH: 1280,
+        MIN_VIEW_HEIGHT: 720,
         /** Screen shake when the player is hit: offset in px and duration in seconds. */
         SHAKE_AMPLITUDE: 8,
         SHAKE_DURATION: 0.2,
