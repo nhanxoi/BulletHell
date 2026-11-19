@@ -42,8 +42,13 @@ export class GameManager extends Component {
 
     protected start(): void {
         // NOTE: start() instead of onLoad() so every view has registered its listeners (onEnable)
-        // before the first round broadcasts its initial HP and phase.
-        this.startGame();
+        // before the first round broadcasts its initial HP and phase. The round then waits in Ready
+        // until the start screen calls startGame(), so the player is not attacked while the page loads.
+        // NOTE: on web, input is dispatched straight from the DOM, so a tap or key can reach the start
+        // screen before this first start(); the round is then already running and must not be reset.
+        if (this._state === GameState.Ready) {
+            this.prepareRound();
+        }
     }
 
     protected update(dt: number): void {
@@ -76,16 +81,12 @@ export class GameManager extends Component {
         return this._state;
     }
 
-    /** Starts a new round without reloading the scene. Also used by the Restart button. */
+    /** Starts a new round without reloading the scene. Used by the start screen and the Restart button. */
     startGame(): void {
         if (!this._world) {
             return;
         }
-        // NOTE: passing through Ready lets every view clear the previous round (panel, camera snap).
-        this.setState(GameState.Ready);
-        this._world.reset();
-        this._input.isDashRequested = false;
-        this.emitInitialValues(this._world);
+        this.prepareRound();
         this.setState(GameState.Playing);
     }
 
@@ -101,6 +102,20 @@ export class GameManager extends Component {
     }
 
     // ---- Private ----
+
+    /**
+     * Resets the world and the HUD, and leaves the game in Ready (nothing moves until Playing).
+     * NOTE: passing through Ready lets every view clear the previous round (panel, camera snap).
+     */
+    private prepareRound(): void {
+        if (!this._world) {
+            return;
+        }
+        this.setState(GameState.Ready);
+        this._world.reset();
+        this._input.isDashRequested = false;
+        this.emitInitialValues(this._world);
+    }
 
     /**
      * Advances the world by one real frame, split into steps no longer than MAX_DT, so a slow frame
