@@ -54,8 +54,12 @@ Optional and bonus items, also done:
 - Visual feedback: boss tint darkens per phase, white flash during the dash windup, purple tint while dashing,
   short flash when the boss is hit, the boss disappears when defeated, player blink while invulnerable, camera shake
   when the player is hit, HP bars and a phase label.
+- Start screen with the controls; the first round waits until the player taps or presses a key (this is also
+  the gesture browsers need before playing audio).
 - Smooth follow camera clamped to the arena.
-- Virtual joystick on touch devices (the keyboard hint is hidden there).
+- Virtual joystick and DASH button on touch devices (the keyboard hint is hidden there).
+- Multi-screen support: phones (16:9 to 21:9), tablets (4:3) and portrait web, with the HUD kept inside the
+  safe area (notches, rounded corners). See *Screen adaptation*.
 
 ## Architecture
 
@@ -104,8 +108,20 @@ flowchart LR
 - `GameRoot`: GameManager, KeyboardInput, AudioPlayer with two AudioSources (music, effects).
 - `World` (RenderRoot2D, layer DEFAULT): `GameCamera` (orthographic, follows the player), floor and four walls,
   bullet layers, boss, player.
-- `Canvas` (layer UI_2D) with its own `UICamera` drawn on top: HP bars, phase label, controls hint, joystick,
-  DASH button, Game Over popup.
+- `Canvas` (layer UI_2D, ScreenAdapter) with its own `UICamera` drawn on top: `SafeArea` (HP bars, phase label,
+  controls hint, joystick, DASH button), Game Over popup, start screen.
+
+### Screen adaptation
+
+- **Resolution policy by screen shape** (`ui/ScreenAdapter`): screens at least as wide as 16:9 use Fit Height and
+  see more to the sides; narrower screens (4:3 tablets, portrait) use Fit Width and see more above and below. The
+  whole 1280x720 design area is therefore always on screen, so no HUD element is ever cut off.
+- **Camera zoom** (`view/CameraFollow`): `orthoHeight` is computed from the screen aspect so at least
+  1280x720 world px are visible on every device (`CAMERA.MIN_VIEW_WIDTH/HEIGHT`), recomputed on resize/rotation.
+- **Safe area**: HP bars, phase label, hint, joystick and DASH button sit under a `SafeArea` node (engine
+  component), so notches and rounded corners never cover them; the Game Over blocker still covers the full screen.
+- Widgets use `ON_WINDOW_RESIZE` (aligned once and on resize, never every frame). The Android build is locked to
+  landscape.
 
 ### Extending the boss
 
@@ -130,6 +146,7 @@ flowchart LR
   speed and fast bullets cannot skip through a target. Frames longer than 250 ms (GC, debugger) are cut, not
   fast-forwarded.
 - **Restart without reloading the scene.** `GameOver → Ready → Playing`; `BattleWorld.reset()` resets every model.
+  At launch the first round waits in `Ready` behind the start screen.
 - **HP phase thresholds 60% / 30%**, phases only move forward within a round, and a dash is never interrupted by a
   random re-pick (the brain retries once the move is interruptible).
 - **Dash direction** is locked when the windup starts (the "moment of activation"), so the windup flash telegraphs
@@ -155,7 +172,8 @@ flowchart LR
 | `EventBus.on` (HealthBarView, PhaseLabelView, GameOverPanel, CameraFollow, BossView) | `EventBus.off` with the same handler and target | `onEnable` ↔ `onDisable` |
 | `input.on` KEY_DOWN / KEY_UP, `game.on(EVENT_HIDE)` (KeyboardInput) | `input.off` / `game.off`, held keys released | `onEnable` ↔ `onDisable` |
 | `node.on` touch events (VirtualJoystick), Restart button click (GameOverPanel) | `node.off` | `onEnable` ↔ `onDisable` |
-| `view.on('canvas-resize')` (CameraFollow) | `view.off` | `onEnable` ↔ `onDisable` |
+| `view.on('canvas-resize')` (CameraFollow, ScreenAdapter) | `view.off` | `onEnable` ↔ `onDisable` |
+| `node.on(TOUCH_END)`, `input.on(KEY_UP)` (StartScreen) | `off` (the node hides itself after the first start) | `onEnable` ↔ `onDisable` |
 | `node.on(TOUCH_START)` (DashButton) | `node.off` | `onEnable` ↔ `onDisable` |
 | Music `AudioSource.play()` (loop), `EventBus.on` / `input.on` (AudioPlayer) | `stop()`, `off` | `onEnable` ↔ `onDisable` |
 | Bullet slots `instantiate(prefab)` (BulletLayerView) | children of the layer, destroyed with it; slot array cleared | `onDestroy` |
