@@ -8,6 +8,7 @@ inside a large rectangular arena closed by four walls.
 
 - **Play in the browser (no install)**: https://claude.ai/artifact/CrUxMfXZBLN7ULPG5nTkXq — tap or press a key to
   start; sound starts after the first tap.
+- **Builds (Google Drive)**: https://drive.google.com/drive/folders/1_BiLxdtwbhJzhUI1HPYBFyyndI3hrHCg?usp=sharing `BulletHell.apk` (Android) and `BulletHell-web.zip` (web-mobile).
 - **Editor**: open the folder with Cocos Creator **3.7.4** (Dashboard → Projects → Add), open
   `assets/scenes/Main.scene`, press Preview.
 - **Web build**: `build/web-mobile/` (not committed; produce it with Project → Build → Web Mobile, or
