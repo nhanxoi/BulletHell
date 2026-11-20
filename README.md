@@ -6,7 +6,7 @@ inside a large rectangular arena closed by four walls.
 
 ## How to run
 
-- **Play in the browser (no install)**: https://claude.ai/artifact/CrUxMfXZBLN7ULPG5nTkXq — tap or press a key to
+- **Play in the browser (no install)**: https://xoigame.com/bullethell/play/ — tap or press a key to
   start; sound starts after the first tap.
 - **Builds (Google Drive)**: https://drive.google.com/drive/folders/1_BiLxdtwbhJzhUI1HPYBFyyndI3hrHCg?usp=sharing (contains `BulletHell.apk` (Android) and `BulletHell-web.zip` for web-mobile).
 - **Editor**: open the folder with Cocos Creator **3.7.4** (Dashboard → Projects → Add), open
